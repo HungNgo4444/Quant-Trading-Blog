@@ -5,16 +5,17 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent } from '@/components/ui/card';
-import { Search, Tag } from 'lucide-react';
+import { Search, Tag, Folder } from 'lucide-react';
 import { BlogFilter } from '@/types/blog';
 
 interface SearchAndFilterProps {
   filter: BlogFilter;
   onFilterChange: (filter: BlogFilter) => void;
   availableTags: string[];
+  availableCategories: string[];
 }
 
-const SearchAndFilter = ({ filter, onFilterChange, availableTags }: SearchAndFilterProps) => {
+const SearchAndFilter = ({ filter, onFilterChange, availableTags, availableCategories }: SearchAndFilterProps) => {
   const [searchInput, setSearchInput] = useState(filter.search);
 
   useEffect(() => {
@@ -34,7 +35,7 @@ const SearchAndFilter = ({ filter, onFilterChange, availableTags }: SearchAndFil
 
   const clearFilters = () => {
     setSearchInput('');
-    onFilterChange({ search: '', tags: [], sortBy: 'newest' });
+    onFilterChange({ search: '', tags: [], category: '', sortBy: 'newest' });
   };
 
   return (
@@ -52,21 +53,44 @@ const SearchAndFilter = ({ filter, onFilterChange, availableTags }: SearchAndFil
             />
           </div>
 
-          {/* Sort */}
-          <div className="flex items-center gap-4">
-            <span className="text-sm font-medium text-gray-700">Sắp xếp:</span>
-            <Select value={filter.sortBy} onValueChange={(value: 'newest' | 'oldest' | 'popular') => 
-              onFilterChange({ ...filter, sortBy: value })
-            }>
-              <SelectTrigger className="w-48">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="newest">Mới nhất</SelectItem>
-                <SelectItem value="oldest">Cũ nhất</SelectItem>
-                <SelectItem value="popular">Phổ biến</SelectItem>
-              </SelectContent>
-            </Select>
+          {/* Sort and Category */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-gray-700">Sắp xếp:</span>
+              <Select value={filter.sortBy} onValueChange={(value: 'newest' | 'oldest' | 'popular' | 'most-liked') => 
+                onFilterChange({ ...filter, sortBy: value })
+              }>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="newest">Mới nhất</SelectItem>
+                  <SelectItem value="oldest">Cũ nhất</SelectItem>
+                  <SelectItem value="popular">Phổ biến</SelectItem>
+                  <SelectItem value="most-liked">Nhiều like nhất</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Folder className="h-4 w-4 text-gray-600" />
+              <span className="text-sm font-medium text-gray-700">Chủ đề:</span>
+              <Select value={filter.category} onValueChange={(value) => 
+                onFilterChange({ ...filter, category: value })
+              }>
+                <SelectTrigger>
+                  <SelectValue placeholder="Tất cả" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Tất cả chủ đề</SelectItem>
+                  {availableCategories.map((category) => (
+                    <SelectItem key={category} value={category}>
+                      {category}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           {/* Tags */}
@@ -90,12 +114,15 @@ const SearchAndFilter = ({ filter, onFilterChange, availableTags }: SearchAndFil
           </div>
 
           {/* Active filters */}
-          {(filter.search || filter.tags.length > 0) && (
+          {(filter.search || filter.tags.length > 0 || filter.category) && (
             <div className="flex items-center justify-between pt-2 border-t">
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-gray-600">Bộ lọc đang áp dụng:</span>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-sm text-gray-600">Bộ lọc:</span>
                 {filter.search && (
                   <Badge variant="secondary">Tìm kiếm: "{filter.search}"</Badge>
+                )}
+                {filter.category && (
+                  <Badge variant="secondary">Chủ đề: {filter.category}</Badge>
                 )}
                 {filter.tags.map((tag) => (
                   <Badge key={tag} variant="secondary">

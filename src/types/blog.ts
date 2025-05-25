@@ -10,10 +10,14 @@ export interface BlogPost {
   readTime: number;
   coverImage?: string;
   featured: boolean;
+  category: string;
+  likes: number;
+  views: number;
 }
 
 export interface BlogFilter {
   search: string;
   tags: string[];
-  sortBy: 'newest' | 'oldest' | 'popular';
+  category: string;
+  sortBy: 'newest' | 'oldest' | 'popular' | 'most-liked';
 }

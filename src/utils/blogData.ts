@@ -42,7 +42,11 @@ const useCounter = (initialValue = 0) => {
     author: 'Nguyễn Văn A',
     publishedAt: '2024-01-15',
     readTime: 8,
-    featured: true
+    coverImage: 'https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=800&h=400&fit=crop',
+    featured: true,
+    category: 'Frontend',
+    likes: 42,
+    views: 856
   },
   {
     id: '2',
@@ -77,7 +81,11 @@ function identity<T>(arg: T): T {
     author: 'Trần Thị B',
     publishedAt: '2024-01-12',
     readTime: 6,
-    featured: false
+    coverImage: 'https://images.unsplash.com/photo-1486312338219-ce68d2c6f44d?w=800&h=400&fit=crop',
+    featured: false,
+    category: 'Programming',
+    likes: 28,
+    views: 543
   },
   {
     id: '3',
@@ -114,7 +122,11 @@ Tạo grid container:
     author: 'Lê Văn C',
     publishedAt: '2024-01-10',
     readTime: 5,
-    featured: true
+    coverImage: 'https://images.unsplash.com/photo-1488590528505-98d2b5aba04b?w=800&h=400&fit=crop',
+    featured: true,
+    category: 'Frontend',
+    likes: 35,
+    views: 724
   },
   {
     id: '4',
@@ -150,7 +162,11 @@ process.on('exit', () => {
     author: 'Phạm Văn D',
     publishedAt: '2024-01-08',
     readTime: 7,
-    featured: false
+    coverImage: 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=800&h=400&fit=crop',
+    featured: false,
+    category: 'Backend',
+    likes: 19,
+    views: 432
   },
   {
     id: '5',
@@ -188,7 +204,11 @@ db.users.createIndex({ "name": 1, "email": 1 });
     author: 'Hoàng Thị E',
     publishedAt: '2024-01-05',
     readTime: 9,
-    featured: false
+    coverImage: 'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=800&h=400&fit=crop',
+    featured: false,
+    category: 'Database',
+    likes: 31,
+    views: 612
   }
 ];
 
@@ -211,10 +231,17 @@ export const getAllTags = (): string[] => {
   return [...new Set(allTags)].sort();
 };
 
-export const addPost = (post: Omit<BlogPost, 'id'>): BlogPost => {
+export const getAllCategories = (): string[] => {
+  const allCategories = blogPosts.map(post => post.category);
+  return [...new Set(allCategories)].sort();
+};
+
+export const addPost = (post: Omit<BlogPost, 'id' | 'likes' | 'views'>): BlogPost => {
   const newPost: BlogPost = {
     ...post,
     id: Date.now().toString(),
+    likes: 0,
+    views: 0,
   };
   blogPosts.unshift(newPost);
   return newPost;
@@ -236,7 +263,7 @@ export const deletePost = (id: string): boolean => {
   return true;
 };
 
-export const searchPosts = (query: string, tags: string[] = []): BlogPost[] => {
+export const searchPosts = (query: string, tags: string[] = [], category: string = ''): BlogPost[] => {
   return blogPosts.filter(post => {
     const matchesQuery = query === '' || 
       post.title.toLowerCase().includes(query.toLowerCase()) ||
@@ -246,6 +273,24 @@ export const searchPosts = (query: string, tags: string[] = []): BlogPost[] => {
     const matchesTags = tags.length === 0 || 
       tags.some(tag => post.tags.includes(tag));
     
-    return matchesQuery && matchesTags;
+    const matchesCategory = category === '' || post.category === category;
+    
+    return matchesQuery && matchesTags && matchesCategory;
   });
+};
+
+export const likePost = (id: string): boolean => {
+  const post = getPostById(id);
+  if (!post) return false;
+  
+  updatePost(id, { likes: post.likes + 1 });
+  return true;
+};
+
+export const incrementViews = (id: string): boolean => {
+  const post = getPostById(id);
+  if (!post) return false;
+  
+  updatePost(id, { views: post.views + 1 });
+  return true;
 };

@@ -24,6 +24,8 @@ const Admin = () => {
     excerpt: '',
     tags: '',
     author: '',
+    category: '',
+    coverImage: '',
     readTime: 5,
     featured: false
   });
@@ -35,7 +37,7 @@ const Admin = () => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!formData.title || !formData.content || !formData.excerpt || !formData.author) {
+    if (!formData.title || !formData.content || !formData.excerpt || !formData.author || !formData.category) {
       toast({
         title: "Lỗi",
         description: "Vui lòng điền đầy đủ thông tin bắt buộc",
@@ -50,6 +52,8 @@ const Admin = () => {
       excerpt: formData.excerpt,
       tags: formData.tags.split(',').map(tag => tag.trim()).filter(tag => tag),
       author: formData.author,
+      category: formData.category,
+      coverImage: formData.coverImage || undefined,
       publishedAt: new Date().toISOString().split('T')[0],
       readTime: formData.readTime,
       featured: formData.featured
@@ -63,6 +67,8 @@ const Admin = () => {
       excerpt: '',
       tags: '',
       author: '',
+      category: '',
+      coverImage: '',
       readTime: 5,
       featured: false
     });
@@ -142,6 +148,29 @@ const Admin = () => {
                       onChange={(e) => handleInputChange('author', e.target.value)}
                       placeholder="Tên tác giả"
                       required
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <Label htmlFor="category">Chủ đề *</Label>
+                    <Input
+                      id="category"
+                      value={formData.category}
+                      onChange={(e) => handleInputChange('category', e.target.value)}
+                      placeholder="Frontend, Backend, Database..."
+                      required
+                    />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="coverImage">Hình minh họa (URL)</Label>
+                    <Input
+                      id="coverImage"
+                      value={formData.coverImage}
+                      onChange={(e) => handleInputChange('coverImage', e.target.value)}
+                      placeholder="https://example.com/image.jpg"
                     />
                   </div>
                 </div>

@@ -3,29 +3,34 @@ import { useState, useMemo } from 'react';
 import Header from '@/components/Header';
 import BlogCard from '@/components/BlogCard';
 import SearchAndFilter from '@/components/SearchAndFilter';
-import { getAllPosts, getAllTags, getFeaturedPosts, searchPosts } from '@/utils/blogData';
+import { getAllPosts, getAllTags, getAllCategories, getFeaturedPosts, searchPosts } from '@/utils/blogData';
 import { BlogFilter } from '@/types/blog';
 
 const Index = () => {
   const [filter, setFilter] = useState<BlogFilter>({
     search: '',
     tags: [],
+    category: '',
     sortBy: 'newest'
   });
 
   const allPosts = getAllPosts();
   const featuredPosts = getFeaturedPosts();
   const availableTags = getAllTags();
+  const availableCategories = getAllCategories();
 
   const filteredPosts = useMemo(() => {
-    let posts = searchPosts(filter.search, filter.tags);
+    let posts = searchPosts(filter.search, filter.tags, filter.category);
     
     switch (filter.sortBy) {
       case 'oldest':
         posts = posts.sort((a, b) => new Date(a.publishedAt).getTime() - new Date(b.publishedAt).getTime());
         break;
       case 'popular':
-        posts = posts.sort((a, b) => b.readTime - a.readTime);
+        posts = posts.sort((a, b) => b.views - a.views);
+        break;
+      case 'most-liked':
+        posts = posts.sort((a, b) => b.likes - a.likes);
         break;
       default: // newest
         posts = posts.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
@@ -66,6 +71,7 @@ const Index = () => {
           filter={filter}
           onFilterChange={setFilter}
           availableTags={availableTags}
+          availableCategories={availableCategories}
         />
 
         {/* All Posts */}
