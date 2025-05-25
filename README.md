@@ -33,8 +33,8 @@ Một blog chuyên về giao dịch định lượng được xây dựng với 
 
 ### 1. Clone repository
 ```bash
-git clone https://github.com/yourusername/quantitative-trading-blog.git
-cd quantitative-trading-blog
+git clone https://github.com/HungNgo4444/Quant-Trading-Blog.git
+cd Quant-Trading-Blog
 ```
 
 ### 2. Cài đặt dependencies
