@@ -1,0 +1,33 @@
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { Toaster } from '@/components/ui/toaster';
+import { AuthProvider } from '@/contexts/AuthContext';
+import Index from '@/pages/Index';
+import BlogPost from '@/pages/BlogPost';
+import About from '@/pages/About';
+import Auth from '@/pages/Auth';
+import Admin from '@/pages/Admin';
+import Profile from '@/pages/Profile';
+import Settings from '@/pages/Settings';
+
+function App() {
+  return (
+    <AuthProvider>
+      <Router>
+        <div className="min-h-screen bg-gray-50">
+          <Routes>
+            <Route path="/" element={<Index />} />
+            <Route path="/post/:id" element={<BlogPost />} />
+            <Route path="/about" element={<About />} />
+            <Route path="/auth" element={<Auth />} />
+            <Route path="/admin" element={<Admin />} />
+            <Route path="/profile" element={<Profile />} />
+            <Route path="/settings" element={<Settings />} />
+          </Routes>
+          <Toaster />
+        </div>
+      </Router>
+    </AuthProvider>
+  );
+}
+
+export default App;
