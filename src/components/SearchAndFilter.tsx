@@ -75,14 +75,14 @@ const SearchAndFilter = ({ filter, onFilterChange, availableTags, availableCateg
             <div className="flex items-center gap-2">
               <Folder className="h-4 w-4 text-gray-600" />
               <span className="text-sm font-medium text-gray-700">Chủ đề:</span>
-              <Select value={filter.category} onValueChange={(value) => 
-                onFilterChange({ ...filter, category: value })
+              <Select value={filter.category || "all"} onValueChange={(value) => 
+                onFilterChange({ ...filter, category: value === "all" ? "" : value })
               }>
                 <SelectTrigger>
                   <SelectValue placeholder="Tất cả" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Tất cả chủ đề</SelectItem>
+                  <SelectItem value="all">Tất cả chủ đề</SelectItem>
                   {availableCategories.map((category) => (
                     <SelectItem key={category} value={category}>
                       {category}
