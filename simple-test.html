@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Database Test</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .result { margin: 10px 0; padding: 10px; border-radius: 5px; }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        button { margin: 5px; padding: 10px 15px; }
+    </style>
+</head>
+<body>
+    <h1>🧪 Simple Database Test</h1>
+    
+    <div>
+        <button onclick="testConnection()">Test Connection</button>
+        <button onclick="testGetPosts()">Get Posts</button>
+        <button onclick="testCreatePost()">Create Test Post</button>
+        <button onclick="testDeletePost()">Delete Test Post</button>
+    </div>
+    
+    <div id="results"></div>
+
+    <script>
+        const SUPABASE_URL = 'https://ebcjduaadxsfrmdkinle.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImViY2pkdWFhZHhzZnJtZGtpbmxlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgxOTEzNDEsImV4cCI6MjA2Mzc2NzM0MX0.Kh4mgvAqisRpfWJRKFnZJj1NuSy-Vj9HC6hqf7bvi8U';
+        
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        let testPostId = null;
+        
+        function addResult(message, isSuccess = true) {
+            const div = document.createElement('div');
+            div.className = `result ${isSuccess ? 'success' : 'error'}`;
+            div.textContent = message;
+            document.getElementById('results').appendChild(div);
+            console.log(message);
+        }
+
+        async function testConnection() {
+            try {
+                const { data, error } = await supabase
+                    .from('blog_posts')
+                    .select('count(*)')
+                    .limit(1);
+                
+                if (error) {
+                    addResult(`❌ Connection failed: ${error.message}`, false);
+                } else {
+                    addResult('✅ Database connection successful!');
+                }
+            } catch (err) {
+                addResult(`❌ Connection error: ${err.message}`, false);
+            }
+        }
+
+        async function testGetPosts() {
+            try {
+                const { data, error } = await supabase
+                    .from('blog_posts')
+                    .select('id, title, likes, shares, views')
+                    .limit(5);
+                
+                if (error) {
+                    addResult(`❌ Get posts failed: ${error.message}`, false);
+                } else {
+                    addResult(`✅ Found ${data.length} posts`);
+                    console.log('Posts:', data);
+                }
+            } catch (err) {
+                addResult(`❌ Get posts error: ${err.message}`, false);
+            }
+        }
+
+        async function testCreatePost() {
+            const testPost = {
+                id: `simple-test-${Date.now()}`,
+                title: 'Simple Test Post',
+                content: 'This is a simple test post.',
+                excerpt: 'Simple test',
+                author: 'Test User',
+                published_at: new Date().toISOString(),
+                tags: ['test'],
+                read_time: 1,
+                views: 0,
+                likes: 0,
+                shares: 0
+            };
+            
+            try {
+                const { data, error } = await supabase
+                    .from('blog_posts')
+                    .insert([testPost])
+                    .select()
+                    .single();
+                
+                if (error) {
+                    addResult(`❌ Create post failed: ${error.message}`, false);
+                } else {
+                    testPostId = data.id;
+                    addResult(`✅ Post created: ${data.id}`);
+                }
+            } catch (err) {
+                addResult(`❌ Create post error: ${err.message}`, false);
+            }
+        }
+
+        async function testDeletePost() {
+            if (!testPostId) {
+                addResult('❌ No test post to delete. Create one first.', false);
+                return;
+            }
+            
+            try {
+                // Delete related data first
+                await supabase.from('post_interactions').delete().eq('post_id', testPostId);
+                await supabase.from('comments').delete().eq('post_id', testPostId);
+                
+                // Then delete the post
+                const { error } = await supabase
+                    .from('blog_posts')
+                    .delete()
+                    .eq('id', testPostId);
+                
+                if (error) {
+                    addResult(`❌ Delete post failed: ${error.message}`, false);
+                } else {
+                    addResult(`✅ Post deleted: ${testPostId}`);
+                    testPostId = null;
+                }
+            } catch (err) {
+                addResult(`❌ Delete post error: ${err.message}`, false);
+            }
+        }
+
+        // Auto test connection
+        window.onload = () => {
+            addResult('🚀 Starting simple database test...');
+            testConnection();
+        };
+    </script>
+</body>
+</html> 

@@ -9,12 +9,14 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2, Mail, Lock, User, ArrowLeft, Shield } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { LoginCredentials, RegisterCredentials } from '@/types/auth';
+import { useToast } from '@/hooks/use-toast';
 import Header from '@/components/Header';
 
 const Auth = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { login, register, verifyEmail, resendVerificationCode, isLoading } = useAuth();
+  const { toast } = useToast();
   
   const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'login');
   const [showVerification, setShowVerification] = useState(false);
@@ -44,16 +46,55 @@ const Auth = () => {
     e.preventDefault();
     const response = await login(loginForm);
     if (response.success) {
+      toast({
+        title: "Đăng nhập thành công",
+        description: response.message || "Chào mừng bạn quay trở lại!",
+      });
       navigate('/');
+    } else {
+      toast({
+        title: "Đăng nhập thất bại",
+        description: response.message || "Email hoặc mật khẩu không đúng",
+        variant: "destructive",
+      });
     }
   };
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validate password confirmation
+    if (registerForm.password !== registerForm.confirmPassword) {
+      toast({
+        title: "Lỗi xác nhận mật khẩu",
+        description: "Mật khẩu và xác nhận mật khẩu không khớp",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     const response = await register(registerForm);
-    if (response.success && response.requiresEmailVerification) {
-      setVerificationEmail(registerForm.email);
-      setShowVerification(true);
+    if (response.success) {
+      if (response.requiresEmailVerification) {
+        setVerificationEmail(registerForm.email);
+        setShowVerification(true);
+        toast({
+          title: "Đăng ký thành công",
+          description: response.message || "Vui lòng kiểm tra email để xác thực tài khoản",
+        });
+      } else {
+        toast({
+          title: "Đăng ký thành công",
+          description: response.message || "Tài khoản đã được tạo thành công",
+        });
+        setActiveTab('login');
+      }
+    } else {
+      toast({
+        title: "Đăng ký thất bại",
+        description: response.message || "Có lỗi xảy ra khi đăng ký",
+        variant: "destructive",
+      });
     }
   };
 

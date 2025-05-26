@@ -5,7 +5,8 @@ import Index from '@/pages/Index';
 import BlogPost from '@/pages/BlogPost';
 import About from '@/pages/About';
 import Auth from '@/pages/Auth';
-import Admin from '@/pages/Admin';
+import AdminSafe from '@/pages/AdminSafe';
+import AdminSimple from '@/pages/AdminSimple';
 import Profile from '@/pages/Profile';
 import Settings from '@/pages/Settings';
 
@@ -19,7 +20,8 @@ function App() {
             <Route path="/post/:id" element={<BlogPost />} />
             <Route path="/about" element={<About />} />
             <Route path="/auth" element={<Auth />} />
-            <Route path="/admin" element={<Admin />} />
+            <Route path="/admin" element={<AdminSafe />} />
+            <Route path="/admin/panel" element={<AdminSimple />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="/settings" element={<Settings />} />
           </Routes>

@@ -12,6 +12,7 @@ export interface BlogPost {
   views?: number;
   likes?: number;
   shares?: number;
+  isHidden?: boolean;
 }
 
 export const blogPosts: BlogPost[] = [

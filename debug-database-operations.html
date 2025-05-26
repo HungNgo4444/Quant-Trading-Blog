@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Database Operations</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { color: green; }
+        .error { color: red; }
+        .info { color: blue; }
+        button { margin: 5px; padding: 10px; }
+        textarea { width: 100%; height: 100px; margin: 10px 0; }
+        .log { background: #f5f5f5; padding: 10px; margin: 10px 0; border-radius: 3px; font-family: monospace; white-space: pre-wrap; }
+    </style>
+</head>
+<body>
+    <h1>🔍 Debug Database Operations</h1>
+    
+    <div class="test-section">
+        <h2>1. 🔗 Database Connection Test</h2>
+        <button onclick="testConnection()">Test Connection</button>
+        <div id="connectionResult"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>2. 📝 Posts CRUD Operations</h2>
+        <button onclick="testGetPosts()">Get All Posts</button>
+        <button onclick="testCreatePost()">Create Test Post</button>
+        <button onclick="testDeletePost()">Delete Test Post</button>
+        <div id="postsResult"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>3. ❤️ Like/Share Operations</h2>
+        <input type="text" id="postIdForLike" placeholder="Post ID" value="1">
+        <input type="text" id="userIdForLike" placeholder="User ID" value="test-user-123">
+        <br>
+        <button onclick="testLike()">Test Like</button>
+        <button onclick="testShare()">Test Share</button>
+        <button onclick="checkLikeStatus()">Check Like Status</button>
+        <div id="likeResult"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>4. 💬 Comments Operations</h2>
+        <input type="text" id="postIdForComment" placeholder="Post ID" value="1">
+        <input type="text" id="userIdForComment" placeholder="User ID" value="test-user-123">
+        <textarea id="commentText" placeholder="Comment text">This is a test comment</textarea>
+        <br>
+        <button onclick="testAddComment()">Add Comment</button>
+        <button onclick="testGetComments()">Get Comments</button>
+        <div id="commentResult"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>5. 📊 Raw Database Queries</h2>
+        <button onclick="testRawQueries()">Test Raw Queries</button>
+        <div id="rawResult"></div>
+    </div>
+
+    <div id="logs" class="log"></div>
+
+    <script>
+        // Supabase configuration
+        const SUPABASE_URL = 'https://ebcjduaadxsfrmdkinle.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImViY2pkdWFhZHhzZnJtZGtpbmxlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgxOTEzNDEsImV4cCI6MjA2Mzc2NzM0MX0.Kh4mgvAqisRpfWJRKFnZJj1NuSy-Vj9HC6hqf7bvi8U';
+        
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logDiv = document.getElementById('logs');
+            const className = type === 'error' ? 'error' : type === 'success' ? 'success' : 'info';
+            logDiv.innerHTML += `<span class="${className}">[${timestamp}] ${message}</span>\n`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+            console.log(`[${timestamp}] ${message}`);
+        }
+
+        async function testConnection() {
+            log('🔗 Testing database connection...');
+            const resultDiv = document.getElementById('connectionResult');
+            
+            try {
+                const { data, error } = await supabase
+                    .from('blog_posts')
+                    .select('count(*)')
+                    .limit(1);
+                
+                if (error) {
+                    log(`❌ Connection failed: ${error.message}`, 'error');
+                    resultDiv.innerHTML = `<div class="error">❌ Connection failed: ${error.message}</div>`;
+                } else {
+                    log('✅ Database connection successful!', 'success');
+                    resultDiv.innerHTML = `<div class="success">✅ Connection successful! Found posts in database.</div>`;
+                }
+            } catch (err) {
+                log(`❌ Connection error: ${err.message}`, 'error');
+                resultDiv.innerHTML = `<div class="error">❌ Connection error: ${err.message}</div>`;
+            }
+        }
+
+        async function testGetPosts() {
+            log('📝 Testing get posts...');
+            const resultDiv = document.getElementById('postsResult');
+            
+            try {
+                const { data, error } = await supabase
+                    .from('blog_posts')
+                    .select('*')
+                    .order('published_at', { ascending: false });
+                
+                if (error) {
+                    log(`❌ Get posts failed: ${error.message}`, 'error');
+                    resultDiv.innerHTML = `<div class="error">❌ Get posts failed: ${error.message}</div>`;
+                } else {
+                    log(`✅ Found ${data.length} posts`, 'success');
+                    resultDiv.innerHTML = `<div class="success">✅ Found ${data.length} posts</div>
+                        <div class="log">${JSON.stringify(data.slice(0, 2), null, 2)}</div>`;
+                }
+            } catch (err) {
+                log(`❌ Get posts error: ${err.message}`, 'error');
+                resultDiv.innerHTML = `<div class="error">❌ Get posts error: ${err.message}</div>`;
+            }
+        }
+
+        async function testCreatePost() {
+            log('📝 Testing create post...');
+            const resultDiv = document.getElementById('postsResult');
+            
+            const testPost = {
+                id: `test-post-${Date.now()}`,
+                title: 'Test Post for Debugging',
+                content: 'This is a test post created for debugging purposes.',
+                excerpt: 'Test post excerpt',
+                author: 'Debug Tester',
+                published_at: new Date().toISOString(),
+                tags: ['test', 'debug'],
+                read_time: 1,
+                views: 0,
+                likes: 0,
+                shares: 0
+            };
+            
+            try {
+                const { data, error } = await supabase
+                    .from('blog_posts')
+                    .insert([testPost])
+                    .select()
+                    .single();
+                
+                if (error) {
+                    log(`❌ Create post failed: ${error.message}`, 'error');
+                    resultDiv.innerHTML += `<div class="error">❌ Create post failed: ${error.message}</div>`;
+                } else {
+                    log(`✅ Post created successfully: ${data.id}`, 'success');
+                    resultDiv.innerHTML += `<div class="success">✅ Post created: ${data.id}</div>`;
+                    window.testPostId = data.id; // Store for deletion test
+                }
+            } catch (err) {
+                log(`❌ Create post error: ${err.message}`, 'error');
+                resultDiv.innerHTML += `<div class="error">❌ Create post error: ${err.message}</div>`;
+            }
+        }
+
+        async function testDeletePost() {
+            log('🗑️ Testing delete post...');
+            const resultDiv = document.getElementById('postsResult');
+            
+            if (!window.testPostId) {
+                log('❌ No test post ID available. Create a post first.', 'error');
+                resultDiv.innerHTML += `<div class="error">❌ No test post to delete</div>`;
+                return;
+            }
+            
+            try {
+                const { error } = await supabase
+                    .from('blog_posts')
+                    .delete()
+                    .eq('id', window.testPostId);
+                
+                if (error) {
+                    log(`❌ Delete post failed: ${error.message}`, 'error');
+                    resultDiv.innerHTML += `<div class="error">❌ Delete failed: ${error.message}</div>`;
+                } else {
+                    log(`✅ Post deleted successfully: ${window.testPostId}`, 'success');
+                    resultDiv.innerHTML += `<div class="success">✅ Post deleted: ${window.testPostId}</div>`;
+                    window.testPostId = null;
+                }
+            } catch (err) {
+                log(`❌ Delete post error: ${err.message}`, 'error');
+                resultDiv.innerHTML += `<div class="error">❌ Delete error: ${err.message}</div>`;
+            }
+        }
+
+        async function testLike() {
+            log('❤️ Testing like operation...');
+            const resultDiv = document.getElementById('likeResult');
+            const postId = document.getElementById('postIdForLike').value;
+            const userId = document.getElementById('userIdForLike').value;
+            
+            try {
+                // Check if already liked
+                const { data: existingLike } = await supabase
+                    .from('post_interactions')
+                    .select('id')
+                    .eq('post_id', postId)
+                    .eq('user_id', userId)
+                    .eq('type', 'like')
+                    .single();
+                
+                if (existingLike) {
+                    // Remove like
+                    const { error: deleteError } = await supabase
+                        .from('post_interactions')
+                        .delete()
+                        .eq('id', existingLike.id);
+                    
+                    if (deleteError) {
+                        log(`❌ Remove like failed: ${deleteError.message}`, 'error');
+                        resultDiv.innerHTML += `<div class="error">❌ Remove like failed</div>`;
+                        return;
+                    }
+                    
+                    // Update post likes count
+                    const { data: post } = await supabase
+                        .from('blog_posts')
+                        .select('likes')
+                        .eq('id', postId)
+                        .single();
+                    
+                    if (post) {
+                        await supabase
+                            .from('blog_posts')
+                            .update({ likes: Math.max(0, (post.likes || 0) - 1) })
+                            .eq('id', postId);
+                    }
+                    
+                    log(`✅ Like removed for post ${postId}`, 'success');
+                    resultDiv.innerHTML += `<div class="success">✅ Like removed</div>`;
+                } else {
+                    // Add like
+                    const { error: insertError } = await supabase
+                        .from('post_interactions')
+                        .insert([{
+                            post_id: postId,
+                            user_id: userId,
+                            type: 'like'
+                        }]);
+                    
+                    if (insertError) {
+                        log(`❌ Add like failed: ${insertError.message}`, 'error');
+                        resultDiv.innerHTML += `<div class="error">❌ Add like failed</div>`;
+                        return;
+                    }
+                    
+                    // Update post likes count
+                    const { data: post } = await supabase
+                        .from('blog_posts')
+                        .select('likes')
+                        .eq('id', postId)
+                        .single();
+                    
+                    if (post) {
+                        await supabase
+                            .from('blog_posts')
+                            .update({ likes: (post.likes || 0) + 1 })
+                            .eq('id', postId);
+                    }
+                    
+                    log(`✅ Like added for post ${postId}`, 'success');
+                    resultDiv.innerHTML += `<div class="success">✅ Like added</div>`;
+                }
+            } catch (err) {
+                log(`❌ Like operation error: ${err.message}`, 'error');
+                resultDiv.innerHTML += `<div class="error">❌ Like error: ${err.message}</div>`;
+            }
+        }
+
+        async function checkLikeStatus() {
+            log('🔍 Checking like status...');
+            const resultDiv = document.getElementById('likeResult');
+            const postId = document.getElementById('postIdForLike').value;
+            const userId = document.getElementById('userIdForLike').value;
+            
+            try {
+                // Get post data
+                const { data: post, error: postError } = await supabase
+                    .from('blog_posts')
+                    .select('likes')
+                    .eq('id', postId)
+                    .single();
+                
+                // Get user like status
+                const { data: userLike, error: likeError } = await supabase
+                    .from('post_interactions')
+                    .select('id')
+                    .eq('post_id', postId)
+                    .eq('user_id', userId)
+                    .eq('type', 'like')
+                    .single();
+                
+                const likesCount = post ? post.likes || 0 : 0;
+                const hasLiked = !!userLike;
+                
+                log(`📊 Post ${postId}: ${likesCount} likes, User ${userId} has liked: ${hasLiked}`, 'info');
+                resultDiv.innerHTML += `<div class="info">📊 Likes: ${likesCount}, User liked: ${hasLiked}</div>`;
+                
+            } catch (err) {
+                log(`❌ Check like status error: ${err.message}`, 'error');
+                resultDiv.innerHTML += `<div class="error">❌ Check error: ${err.message}</div>`;
+            }
+        }
+
+        async function testAddComment() {
+            log('💬 Testing add comment...');
+            const resultDiv = document.getElementById('commentResult');
+            const postId = document.getElementById('postIdForComment').value;
+            const userId = document.getElementById('userIdForComment').value;
+            const content = document.getElementById('commentText').value;
+            
+            try {
+                const { data, error } = await supabase
+                    .from('comments')
+                    .insert([{
+                        post_id: postId,
+                        user_id: userId,
+                        user_name: 'Debug User',
+                        content: content
+                    }])
+                    .select()
+                    .single();
+                
+                if (error) {
+                    log(`❌ Add comment failed: ${error.message}`, 'error');
+                    resultDiv.innerHTML += `<div class="error">❌ Add comment failed: ${error.message}</div>`;
+                } else {
+                    log(`✅ Comment added: ${data.id}`, 'success');
+                    resultDiv.innerHTML += `<div class="success">✅ Comment added: ${data.id}</div>`;
+                }
+            } catch (err) {
+                log(`❌ Add comment error: ${err.message}`, 'error');
+                resultDiv.innerHTML += `<div class="error">❌ Add comment error: ${err.message}</div>`;
+            }
+        }
+
+        async function testGetComments() {
+            log('💬 Testing get comments...');
+            const resultDiv = document.getElementById('commentResult');
+            const postId = document.getElementById('postIdForComment').value;
+            
+            try {
+                const { data, error } = await supabase
+                    .from('comments')
+                    .select('*')
+                    .eq('post_id', postId)
+                    .order('created_at', { ascending: false });
+                
+                if (error) {
+                    log(`❌ Get comments failed: ${error.message}`, 'error');
+                    resultDiv.innerHTML += `<div class="error">❌ Get comments failed: ${error.message}</div>`;
+                } else {
+                    log(`✅ Found ${data.length} comments for post ${postId}`, 'success');
+                    resultDiv.innerHTML += `<div class="success">✅ Found ${data.length} comments</div>
+                        <div class="log">${JSON.stringify(data, null, 2)}</div>`;
+                }
+            } catch (err) {
+                log(`❌ Get comments error: ${err.message}`, 'error');
+                resultDiv.innerHTML += `<div class="error">❌ Get comments error: ${err.message}</div>`;
+            }
+        }
+
+        async function testRawQueries() {
+            log('📊 Testing raw database queries...');
+            const resultDiv = document.getElementById('rawResult');
+            
+            try {
+                // Test posts table
+                const { data: posts, error: postsError } = await supabase
+                    .from('blog_posts')
+                    .select('id, title, likes, shares, views')
+                    .limit(5);
+                
+                // Test interactions table
+                const { data: interactions, error: interactionsError } = await supabase
+                    .from('post_interactions')
+                    .select('*')
+                    .limit(10);
+                
+                // Test comments table
+                const { data: comments, error: commentsError } = await supabase
+                    .from('comments')
+                    .select('*')
+                    .limit(10);
+                
+                let result = '<h3>Raw Database Data:</h3>';
+                
+                if (postsError) {
+                    result += `<div class="error">Posts error: ${postsError.message}</div>`;
+                } else {
+                    result += `<h4>Posts (${posts.length}):</h4><div class="log">${JSON.stringify(posts, null, 2)}</div>`;
+                }
+                
+                if (interactionsError) {
+                    result += `<div class="error">Interactions error: ${interactionsError.message}</div>`;
+                } else {
+                    result += `<h4>Interactions (${interactions.length}):</h4><div class="log">${JSON.stringify(interactions, null, 2)}</div>`;
+                }
+                
+                if (commentsError) {
+                    result += `<div class="error">Comments error: ${commentsError.message}</div>`;
+                } else {
+                    result += `<h4>Comments (${comments.length}):</h4><div class="log">${JSON.stringify(comments, null, 2)}</div>`;
+                }
+                
+                resultDiv.innerHTML = result;
+                log('✅ Raw queries completed', 'success');
+                
+            } catch (err) {
+                log(`❌ Raw queries error: ${err.message}`, 'error');
+                resultDiv.innerHTML = `<div class="error">❌ Raw queries error: ${err.message}</div>`;
+            }
+        }
+
+        // Auto-test connection on load
+        window.onload = function() {
+            log('🚀 Debug tool loaded. Testing connection...');
+            testConnection();
+        };
+    </script>
+</body>
+</html> 

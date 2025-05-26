@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Supabase API Connection Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .success {
+            background-color: #d4edda;
+            border-color: #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            border-color: #f5c6cb;
+            color: #721c24;
+        }
+        .info {
+            background-color: #d1ecf1;
+            border-color: #bee5eb;
+            color: #0c5460;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        pre {
+            background-color: #f8f9fa;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        .status {
+            font-weight: bold;
+            padding: 5px 10px;
+            border-radius: 3px;
+            display: inline-block;
+            margin: 5px 0;
+        }
+        .status.online {
+            background-color: #28a745;
+            color: white;
+        }
+        .status.offline {
+            background-color: #dc3545;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Supabase API Connection Test</h1>
+        <p>Test kết nối đến Supabase database cho Quantitative Trading Blog</p>
+
+        <div class="test-section info">
+            <h3>📋 Thông tin cấu hình</h3>
+            <p><strong>Project URL:</strong> https://ebcjduaadxsfrmdkinle.supabase.co</p>
+            <p><strong>Project ID:</strong> ebcjduaadxsfrmdkinle</p>
+            <p><strong>API Key:</strong> eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9... (ẩn)</p>
+        </div>
+
+        <div class="test-section">
+            <h3>🌐 Test 1: Basic API Connection</h3>
+            <button onclick="testBasicConnection()">Test Basic Connection</button>
+            <div id="basic-result"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>🗄️ Test 2: Database Tables</h3>
+            <button onclick="testProfiles()">Test Profiles Table</button>
+            <button onclick="testBlogPosts()">Test Blog Posts Table</button>
+            <button onclick="testBlogSettings()">Test Blog Settings Table</button>
+            <div id="tables-result"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>🔐 Test 3: Authentication</h3>
+            <button onclick="testAuth()">Test Auth Endpoint</button>
+            <div id="auth-result"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>📊 Test Results Summary</h3>
+            <div id="summary"></div>
+        </div>
+    </div>
+
+    <script>
+        const SUPABASE_URL = 'https://ebcjduaadxsfrmdkinle.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImViY2pkdWFhZHhzZnJtZGtpbmxlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgxOTEzNDEsImV4cCI6MjA2Mzc2NzM0MX0.Kh4mgvAqisRpfWJRKFnZJj1NuSy-Vj9HC6hqf7bvi8U';
+        
+        let testResults = {
+            basic: null,
+            profiles: null,
+            blogPosts: null,
+            blogSettings: null,
+            auth: null
+        };
+
+        function updateResult(elementId, success, message, data = null) {
+            const element = document.getElementById(elementId);
+            const className = success ? 'success' : 'error';
+            const icon = success ? '✅' : '❌';
+            
+            let html = `<div class="${className}">
+                ${icon} ${message}
+            </div>`;
+            
+            if (data) {
+                html += `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+            }
+            
+            element.innerHTML = html;
+            updateSummary();
+        }
+
+        async function testBasicConnection() {
+            try {
+                console.log('🔄 Testing basic connection...');
+                
+                const response = await fetch(`${SUPABASE_URL}/rest/v1/`, {
+                    headers: {
+                        'apikey': SUPABASE_ANON_KEY,
+                        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+                    }
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    testResults.basic = true;
+                    updateResult('basic-result', true, 'Basic connection successful!', {
+                        status: response.status,
+                        statusText: response.statusText,
+                        data: data
+                    });
+                } else {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+            } catch (error) {
+                console.error('❌ Basic connection failed:', error);
+                testResults.basic = false;
+                updateResult('basic-result', false, `Basic connection failed: ${error.message}`);
+            }
+        }
+
+        async function testProfiles() {
+            try {
+                console.log('🔄 Testing profiles table...');
+                
+                const response = await fetch(`${SUPABASE_URL}/rest/v1/profiles?select=*&limit=5`, {
+                    headers: {
+                        'apikey': SUPABASE_ANON_KEY,
+                        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+                    }
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    testResults.profiles = true;
+                    updateResult('tables-result', true, `Profiles table accessible! Found ${data.length} records.`, data);
+                } else {
+                    const errorData = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${errorData}`);
+                }
+            } catch (error) {
+                console.error('❌ Profiles test failed:', error);
+                testResults.profiles = false;
+                updateResult('tables-result', false, `Profiles table test failed: ${error.message}`);
+            }
+        }
+
+        async function testBlogPosts() {
+            try {
+                console.log('🔄 Testing blog_posts table...');
+                
+                const response = await fetch(`${SUPABASE_URL}/rest/v1/blog_posts?select=*&limit=5`, {
+                    headers: {
+                        'apikey': SUPABASE_ANON_KEY,
+                        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+                    }
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    testResults.blogPosts = true;
+                    const currentResult = document.getElementById('tables-result').innerHTML;
+                    document.getElementById('tables-result').innerHTML = currentResult + 
+                        `<div class="success">✅ Blog posts table accessible! Found ${data.length} records.</div>`;
+                } else {
+                    const errorData = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${errorData}`);
+                }
+            } catch (error) {
+                console.error('❌ Blog posts test failed:', error);
+                testResults.blogPosts = false;
+                const currentResult = document.getElementById('tables-result').innerHTML;
+                document.getElementById('tables-result').innerHTML = currentResult + 
+                    `<div class="error">❌ Blog posts table test failed: ${error.message}</div>`;
+            }
+        }
+
+        async function testBlogSettings() {
+            try {
+                console.log('🔄 Testing blog_settings table...');
+                
+                const response = await fetch(`${SUPABASE_URL}/rest/v1/blog_settings?select=*&limit=5`, {
+                    headers: {
+                        'apikey': SUPABASE_ANON_KEY,
+                        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+                    }
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    testResults.blogSettings = true;
+                    const currentResult = document.getElementById('tables-result').innerHTML;
+                    document.getElementById('tables-result').innerHTML = currentResult + 
+                        `<div class="success">✅ Blog settings table accessible! Found ${data.length} records.</div>`;
+                } else {
+                    const errorData = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${errorData}`);
+                }
+            } catch (error) {
+                console.error('❌ Blog settings test failed:', error);
+                testResults.blogSettings = false;
+                const currentResult = document.getElementById('tables-result').innerHTML;
+                document.getElementById('tables-result').innerHTML = currentResult + 
+                    `<div class="error">❌ Blog settings table test failed: ${error.message}</div>`;
+            }
+        }
+
+        async function testAuth() {
+            try {
+                console.log('🔄 Testing auth endpoint...');
+                
+                const response = await fetch(`${SUPABASE_URL}/auth/v1/settings`, {
+                    headers: {
+                        'apikey': SUPABASE_ANON_KEY,
+                        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+                    }
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    testResults.auth = true;
+                    updateResult('auth-result', true, 'Auth endpoint accessible!', data);
+                } else {
+                    const errorData = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${errorData}`);
+                }
+            } catch (error) {
+                console.error('❌ Auth test failed:', error);
+                testResults.auth = false;
+                updateResult('auth-result', false, `Auth test failed: ${error.message}`);
+            }
+        }
+
+        function updateSummary() {
+            const summary = document.getElementById('summary');
+            const total = Object.keys(testResults).length;
+            const passed = Object.values(testResults).filter(result => result === true).length;
+            const failed = Object.values(testResults).filter(result => result === false).length;
+            const pending = Object.values(testResults).filter(result => result === null).length;
+
+            let statusClass = 'info';
+            let statusText = 'Testing in progress...';
+            
+            if (pending === 0) {
+                if (failed === 0) {
+                    statusClass = 'success';
+                    statusText = 'All tests passed! 🎉';
+                } else {
+                    statusClass = 'error';
+                    statusText = `${failed} test(s) failed ❌`;
+                }
+            }
+
+            summary.innerHTML = `
+                <div class="${statusClass}">
+                    <h4>${statusText}</h4>
+                    <p>Passed: ${passed} | Failed: ${failed} | Pending: ${pending}</p>
+                    
+                    <div style="margin-top: 15px;">
+                        <div class="status ${testResults.basic === true ? 'online' : 'offline'}">
+                            Basic Connection: ${testResults.basic === true ? 'OK' : testResults.basic === false ? 'FAILED' : 'PENDING'}
+                        </div>
+                        <div class="status ${testResults.profiles === true ? 'online' : 'offline'}">
+                            Profiles Table: ${testResults.profiles === true ? 'OK' : testResults.profiles === false ? 'FAILED' : 'PENDING'}
+                        </div>
+                        <div class="status ${testResults.blogPosts === true ? 'online' : 'offline'}">
+                            Blog Posts: ${testResults.blogPosts === true ? 'OK' : testResults.blogPosts === false ? 'FAILED' : 'PENDING'}
+                        </div>
+                        <div class="status ${testResults.blogSettings === true ? 'online' : 'offline'}">
+                            Blog Settings: ${testResults.blogSettings === true ? 'OK' : testResults.blogSettings === false ? 'FAILED' : 'PENDING'}
+                        </div>
+                        <div class="status ${testResults.auth === true ? 'online' : 'offline'}">
+                            Authentication: ${testResults.auth === true ? 'OK' : testResults.auth === false ? 'FAILED' : 'PENDING'}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Initialize summary
+        updateSummary();
+
+        // Auto-run basic connection test on page load
+        window.addEventListener('load', () => {
+            setTimeout(testBasicConnection, 1000);
+        });
+    </script>
+</body>
+</html> 

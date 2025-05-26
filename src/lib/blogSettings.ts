@@ -1,5 +1,3 @@
-import { supabase } from './supabase';
-
 export interface BlogSettings {
   id?: string;
   blogTitle: string;
@@ -44,9 +42,22 @@ const defaultSettings: BlogSettings = {
   researchDescription: "Khám phá các phương pháp mới trong machine learning và AI trading"
 };
 
+// FORCE DATABASE MODE - NO MOCK
+const getSupabase = async () => {
+  try {
+    const { supabase } = await import('./supabase');
+    return supabase;
+  } catch (error) {
+    console.error('Failed to load Supabase:', error);
+    throw error;
+  }
+};
+
 export const blogSettingsService = {
   async getSettings(): Promise<BlogSettings> {
     try {
+      // FORCE DATABASE MODE - NO MOCK
+      const supabase = await getSupabase();
       const { data, error } = await supabase
         .from('blog_settings')
         .select('*')
@@ -59,12 +70,15 @@ export const blogSettingsService = {
       return data || defaultSettings;
     } catch (error) {
       console.error('Error fetching blog settings:', error);
-      return defaultSettings;
+      throw error;
     }
   },
 
   async updateSettings(settings: Partial<BlogSettings>): Promise<BlogSettings | null> {
     try {
+      // FORCE DATABASE MODE - NO MOCK
+      const supabase = await getSupabase();
+      
       // First try to update existing settings
       const { data: existingData } = await supabase
         .from('blog_settings')
@@ -100,12 +114,14 @@ export const blogSettingsService = {
       }
     } catch (error) {
       console.error('Error updating blog settings:', error);
-      return null;
+      throw error;
     }
   },
 
   async initializeDefaultSettings(): Promise<void> {
     try {
+      // FORCE DATABASE MODE - NO MOCK
+      const supabase = await getSupabase();
       const { data } = await supabase
         .from('blog_settings')
         .select('id')
@@ -116,6 +132,7 @@ export const blogSettingsService = {
       }
     } catch (error) {
       console.error('Error initializing default settings:', error);
+      throw error;
     }
   }
 }; 

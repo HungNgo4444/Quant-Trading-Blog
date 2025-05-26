@@ -14,6 +14,7 @@ import {
   Edit, 
   Trash2, 
   Eye, 
+  EyeOff,
   Save, 
   X,
   Calendar,
@@ -42,8 +43,11 @@ const Admin = () => {
   const { user, isAdmin, isAuthenticated } = useAuth();
   
   const [posts, setPosts] = useState<BlogPost[]>([]);
+  const [hiddenPosts, setHiddenPosts] = useState<BlogPost[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingHidden, setIsLoadingHidden] = useState(false);
   const [activeTab, setActiveTab] = useState('posts');
+  const [postsSubTab, setPostsSubTab] = useState('visible'); // 'visible' or 'hidden'
   const [showEditor, setShowEditor] = useState(false);
   const [editingPost, setEditingPost] = useState<BlogPost | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -78,12 +82,30 @@ const Admin = () => {
   const loadPosts = async () => {
     setIsLoading(true);
     try {
-      const allPosts = await blogService.getAllPosts();
-      setPosts(allPosts);
+      const allPosts = await blogService.getAllPosts(true); // Include hidden posts for admin
+      // Separate visible and hidden posts
+      const visiblePosts = allPosts.filter(post => !post.isHidden);
+      const hiddenPostsList = allPosts.filter(post => post.isHidden);
+      
+      setPosts(visiblePosts);
+      setHiddenPosts(hiddenPostsList);
     } catch (error) {
       console.error('Error loading posts:', error);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const loadHiddenPosts = async () => {
+    setIsLoadingHidden(true);
+    try {
+      const allPosts = await blogService.getAllPosts(true);
+      const hiddenPostsList = allPosts.filter(post => post.isHidden);
+      setHiddenPosts(hiddenPostsList);
+    } catch (error) {
+      console.error('Error loading hidden posts:', error);
+    } finally {
+      setIsLoadingHidden(false);
     }
   };
 
@@ -147,10 +169,39 @@ const Admin = () => {
     }
     
     try {
-      await blogService.deletePost(postId);
-      await loadPosts();
+      console.log(`🗑️ Admin: Deleting post ${postId}`);
+      const success = await blogService.deletePost(postId);
+      
+      if (success) {
+        console.log('✅ Admin: Post deleted successfully');
+        await loadPosts(); // Reload posts list
+        alert('Bài viết đã được xóa thành công!');
+      } else {
+        console.error('❌ Admin: Delete failed');
+        alert('Có lỗi xảy ra khi xóa bài viết. Vui lòng thử lại.');
+      }
     } catch (error) {
       console.error('Error deleting post:', error);
+      alert('Có lỗi xảy ra khi xóa bài viết. Vui lòng thử lại.');
+    }
+  };
+
+  const handleToggleVisibility = async (postId: string, currentlyHidden: boolean) => {
+    try {
+      console.log(`👁️ Admin: Toggling visibility for post ${postId}`);
+      const success = await blogService.togglePostVisibility(postId);
+      
+      if (success) {
+        console.log('✅ Admin: Post visibility toggled successfully');
+        await loadPosts(); // Reload both visible and hidden posts lists
+        alert(`Bài viết đã được ${currentlyHidden ? 'hiển thị' : 'ẩn'} thành công!`);
+      } else {
+        console.error('❌ Admin: Toggle visibility failed');
+        alert('Có lỗi xảy ra khi thay đổi trạng thái bài viết. Vui lòng thử lại.');
+      }
+    } catch (error) {
+      console.error('Error toggling post visibility:', error);
+      alert('Có lỗi xảy ra khi thay đổi trạng thái bài viết. Vui lòng thử lại.');
     }
   };
 
@@ -179,26 +230,36 @@ const Admin = () => {
 
     setIsSaving(true);
     try {
+      console.log(`💾 Admin: Saving post - ${editingPost ? 'Update' : 'Create'}`);
+      
+      let result;
       if (editingPost) {
         // Update existing post
-        await blogService.updatePost(editingPost.id, {
+        result = await blogService.updatePost(editingPost.id, {
           ...postForm,
           author: user?.name || 'Admin',
           updatedAt: new Date().toISOString()
         });
       } else {
         // Create new post
-        await blogService.createPost({
+        result = await blogService.createPost({
           ...postForm,
           author: user?.name || 'Admin'
         });
       }
       
-      await loadPosts();
-      resetForm();
+      if (result) {
+        console.log('✅ Admin: Post saved successfully');
+        await loadPosts(); // Reload posts list
+        resetForm();
+        alert(`Bài viết đã được ${editingPost ? 'cập nhật' : 'tạo'} thành công!`);
+      } else {
+        console.error('❌ Admin: Save failed');
+        alert('Có lỗi xảy ra khi lưu bài viết. Vui lòng thử lại.');
+      }
     } catch (error) {
       console.error('Error saving post:', error);
-      alert('Có lỗi xảy ra khi lưu bài viết');
+      alert('Có lỗi xảy ra khi lưu bài viết. Vui lòng thử lại.');
     } finally {
       setIsSaving(false);
     }
@@ -232,25 +293,54 @@ const Admin = () => {
             {!showEditor ? (
               <>
                 <div className="flex justify-between items-center">
-                  <h2 className="text-xl font-semibold">Danh sách bài viết</h2>
+                  <h2 className="text-xl font-semibold">Quản lý bài viết</h2>
                   <Button onClick={() => setShowEditor(true)} className="flex items-center gap-2">
                     <Plus className="h-4 w-4" />
                     Tạo bài viết mới
                   </Button>
                 </div>
 
-                {isLoading ? (
-                  <div className="flex justify-center py-8">
-                    <Loader2 className="h-8 w-8 animate-spin" />
-                  </div>
-                ) : (
-                  <div className="grid gap-4">
-                    {posts.map((post) => (
+                {/* Sub-tabs for posts */}
+                <Tabs value={postsSubTab} onValueChange={setPostsSubTab}>
+                  <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="visible" className="flex items-center gap-2">
+                      <Eye className="h-4 w-4" />
+                      Bài viết hiển thị ({posts.length})
+                    </TabsTrigger>
+                    <TabsTrigger value="hidden" className="flex items-center gap-2">
+                      <EyeOff className="h-4 w-4" />
+                      Bài viết ẩn ({hiddenPosts.length})
+                    </TabsTrigger>
+                  </TabsList>
+
+                  <TabsContent value="visible" className="space-y-4">
+                    {isLoading ? (
+                      <div className="flex justify-center py-8">
+                        <Loader2 className="h-8 w-8 animate-spin" />
+                      </div>
+                    ) : posts.length === 0 ? (
+                      <Card>
+                        <CardContent className="p-8 text-center">
+                          <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                          <h3 className="text-lg font-semibold text-gray-600 mb-2">Chưa có bài viết</h3>
+                          <p className="text-gray-500">Tạo bài viết đầu tiên để bắt đầu</p>
+                        </CardContent>
+                      </Card>
+                    ) : (
+                      <div className="grid gap-4">
+                        {posts.map((post) => (
                       <Card key={post.id}>
                         <CardContent className="p-6">
                           <div className="flex justify-between items-start">
                             <div className="flex-1">
-                              <h3 className="text-lg font-semibold mb-2">{post.title}</h3>
+                              <div className="flex items-center gap-2 mb-2">
+                                <h3 className="text-lg font-semibold">{post.title}</h3>
+                                {post.isHidden && (
+                                  <Badge variant="destructive" className="text-xs">
+                                    ẨN
+                                  </Badge>
+                                )}
+                              </div>
                               <p className="text-gray-600 mb-3 line-clamp-2">{post.excerpt}</p>
                               
                               <div className="flex items-center gap-4 text-sm text-gray-500 mb-3">
@@ -265,6 +355,19 @@ const Admin = () => {
                                 <div className="flex items-center gap-1">
                                   <Eye className="h-4 w-4" />
                                   {post.views || 0} lượt xem
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  {post.isHidden ? (
+                                    <>
+                                      <EyeOff className="h-4 w-4 text-red-500" />
+                                      <span className="text-red-500">Đang ẩn</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Eye className="h-4 w-4 text-green-500" />
+                                      <span className="text-green-500">Đang hiển thị</span>
+                                    </>
+                                  )}
                                 </div>
                               </div>
                               
@@ -282,6 +385,7 @@ const Admin = () => {
                                 variant="outline"
                                 size="sm"
                                 onClick={() => navigate(`/post/${post.id}`)}
+                                title="Xem bài viết"
                               >
                                 <Eye className="h-4 w-4" />
                               </Button>
@@ -289,14 +393,25 @@ const Admin = () => {
                                 variant="outline"
                                 size="sm"
                                 onClick={() => handleEditPost(post)}
+                                title="Chỉnh sửa"
                               >
                                 <Edit className="h-4 w-4" />
                               </Button>
                               <Button
                                 variant="outline"
                                 size="sm"
+                                onClick={() => handleToggleVisibility(post.id, post.isHidden || false)}
+                                className={post.isHidden ? "text-green-600 hover:text-green-700" : "text-orange-600 hover:text-orange-700"}
+                                title={post.isHidden ? "Hiển thị bài viết" : "Ẩn bài viết"}
+                              >
+                                {post.isHidden ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
                                 onClick={() => handleDeletePost(post.id)}
                                 className="text-red-600 hover:text-red-700"
+                                title="Xóa bài viết"
                               >
                                 <Trash2 className="h-4 w-4" />
                               </Button>
@@ -304,9 +419,113 @@ const Admin = () => {
                           </div>
                         </CardContent>
                       </Card>
-                    ))}
-                  </div>
-                )}
+                                            ))}
+                      </div>
+                    )}
+                  </TabsContent>
+
+                  <TabsContent value="hidden" className="space-y-4">
+                    {isLoadingHidden ? (
+                      <div className="flex justify-center py-8">
+                        <Loader2 className="h-8 w-8 animate-spin" />
+                      </div>
+                    ) : hiddenPosts.length === 0 ? (
+                      <Card>
+                        <CardContent className="p-8 text-center">
+                          <EyeOff className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                          <h3 className="text-lg font-semibold text-gray-600 mb-2">Không có bài viết ẩn</h3>
+                          <p className="text-gray-500">Tất cả bài viết đang được hiển thị công khai</p>
+                        </CardContent>
+                      </Card>
+                    ) : (
+                      <div className="grid gap-4">
+                        {hiddenPosts.map((post) => (
+                          <Card key={post.id} className="border-red-200 bg-red-50">
+                            <CardContent className="p-6">
+                              <div className="flex justify-between items-start">
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <h3 className="text-lg font-semibold">{post.title}</h3>
+                                    <Badge variant="destructive" className="text-xs">
+                                      ẨN
+                                    </Badge>
+                                  </div>
+                                  <p className="text-gray-600 mb-3 line-clamp-2">{post.excerpt}</p>
+                                  
+                                  <div className="flex items-center gap-4 text-sm text-gray-500 mb-3">
+                                    <div className="flex items-center gap-1">
+                                      <Calendar className="h-4 w-4" />
+                                      {new Date(post.publishedAt).toLocaleDateString('vi-VN')}
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                      <Clock className="h-4 w-4" />
+                                      {post.readTime} phút đọc
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                      <Eye className="h-4 w-4" />
+                                      {post.views || 0} lượt xem
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                      <EyeOff className="h-4 w-4 text-red-500" />
+                                      <span className="text-red-500 font-medium">Đang ẩn</span>
+                                    </div>
+                                  </div>
+                                  
+                                  <div className="flex flex-wrap gap-2">
+                                    {post.tags.map((tag) => (
+                                      <Badge key={tag} variant="secondary">
+                                        {tag}
+                                      </Badge>
+                                    ))}
+                                  </div>
+                                </div>
+                                
+                                <div className="flex items-center gap-2 ml-4">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => navigate(`/post/${post.id}`)}
+                                    title="Xem bài viết (ẩn)"
+                                    className="text-gray-500"
+                                  >
+                                    <Eye className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleEditPost(post)}
+                                    title="Chỉnh sửa"
+                                  >
+                                    <Edit className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    variant="default"
+                                    size="sm"
+                                    onClick={() => handleToggleVisibility(post.id, true)}
+                                    className="text-white bg-green-600 hover:bg-green-700"
+                                    title="Hiển thị bài viết"
+                                  >
+                                    <Eye className="h-4 w-4 mr-1" />
+                                    Hiển thị
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleDeletePost(post.id)}
+                                    className="text-red-600 hover:text-red-700"
+                                    title="Xóa vĩnh viễn"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                    )}
+                  </TabsContent>
+                </Tabs>
               </>
             ) : (
               <Card>
@@ -438,20 +657,24 @@ const Admin = () => {
                 <CardDescription>Tổng quan về hiệu suất blog</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                   <div className="text-center">
                     <div className="text-3xl font-bold text-blue-600">{posts.length}</div>
-                    <div className="text-sm text-gray-600">Tổng bài viết</div>
+                    <div className="text-sm text-gray-600">Bài viết hiển thị</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-3xl font-bold text-red-600">{hiddenPosts.length}</div>
+                    <div className="text-sm text-gray-600">Bài viết ẩn</div>
                   </div>
                   <div className="text-center">
                     <div className="text-3xl font-bold text-green-600">
-                      {posts.reduce((sum, post) => sum + (post.views || 0), 0)}
+                      {[...posts, ...hiddenPosts].reduce((sum, post) => sum + (post.views || 0), 0)}
                     </div>
                     <div className="text-sm text-gray-600">Tổng lượt xem</div>
                   </div>
                   <div className="text-center">
                     <div className="text-3xl font-bold text-purple-600">
-                      {posts.reduce((sum, post) => sum + (post.likes || 0), 0)}
+                      {[...posts, ...hiddenPosts].reduce((sum, post) => sum + (post.likes || 0), 0)}
                     </div>
                     <div className="text-sm text-gray-600">Tổng lượt thích</div>
                   </div>
@@ -696,6 +919,20 @@ const Admin = () => {
             </Card>
           </TabsContent>
         </Tabs>
+
+        {/* Back to Admin Safe */}
+        <div className="mt-8 pt-6 border-t">
+          <div className="flex justify-center">
+            <Button 
+              variant="outline" 
+              onClick={() => navigate('/admin')}
+              className="flex items-center gap-2"
+            >
+              <Shield className="h-4 w-4" />
+              Quay lại Admin Safe
+            </Button>
+          </div>
+        </div>
       </div>
     </div>
   );

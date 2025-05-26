@@ -24,6 +24,20 @@ interface LikeShareActionsProps {
   showComments?: boolean;
 }
 
+interface CommentData {
+  id: string;
+  post_id: string;
+  user_id: string;
+  user_name: string;
+  content: string;
+  parent_id?: string;
+  created_at: string;
+  userId: string;
+  userName: string;
+  parentId?: string;
+  timestamp: string;
+}
+
 const LikeShareActions = ({ 
   postId, 
   initialLikes = 0, 
@@ -35,7 +49,7 @@ const LikeShareActions = ({
   const [likes, setLikes] = useState(initialLikes);
   const [shares, setShares] = useState(initialShares);
   const [isLiked, setIsLiked] = useState(false);
-  const [comments, setComments] = useState<Comment[]>([]);
+  const [comments, setComments] = useState<CommentData[]>([]);
   const [showCommentForm, setShowCommentForm] = useState(false);
   const [commentText, setCommentText] = useState('');
   const [replyTo, setReplyTo] = useState<string | null>(null);
@@ -49,13 +63,39 @@ const LikeShareActions = ({
     // Record view when component mounts
     if (user) {
       blogService.recordView(postId, user.id);
+      checkUserLikeStatus();
     }
   }, [postId, showComments, user]);
 
+  const checkUserLikeStatus = async () => {
+    if (!user) return;
+    
+    try {
+      console.log(`🔍 Checking like status for post ${postId} by user ${user.id}`);
+      const liked = await blogService.checkUserLikeStatus(postId, user.id);
+      setIsLiked(liked);
+      console.log(`✅ User like status loaded: ${liked ? 'LIKED' : 'NOT LIKED'}`);
+    } catch (error) {
+      console.error('Error checking like status:', error);
+    }
+  };
+
   const loadComments = async () => {
     try {
+      console.log(`📥 Loading comments for post ${postId}...`);
       const postComments = await blogService.getComments(postId);
-      setComments(postComments);
+      
+      // Convert to CommentData format
+      const formattedComments = postComments.map(comment => ({
+        ...comment,
+        userId: comment.user_id,
+        userName: comment.user_name,
+        parentId: comment.parent_id,
+        timestamp: comment.created_at || new Date().toISOString()
+      }));
+      
+      setComments(formattedComments);
+      console.log(`✅ Loaded ${formattedComments.length} comments`);
     } catch (error) {
       console.error('Error loading comments:', error);
     }
@@ -72,9 +112,15 @@ const LikeShareActions = ({
     }
 
     try {
+      console.log(`🔄 Handling like for post ${postId} by user ${user.id}`);
       const liked = await blogService.toggleLike(postId, user.id);
+      
+      // Update local state
       setIsLiked(liked);
       setLikes(prev => liked ? prev + 1 : prev - 1);
+      
+      // Don't refresh data automatically to prevent issues
+      // User can refresh page manually if needed
       
       toast({
         title: liked ? "Đã thích bài viết" : "Đã bỏ thích",
@@ -101,6 +147,8 @@ const LikeShareActions = ({
     }
 
     try {
+      console.log(`📤 Handling share for post ${postId} by user ${user.id}`);
+      
       // Copy URL to clipboard
       const url = `${window.location.origin}/post/${postId}`;
       await navigator.clipboard.writeText(url);
@@ -108,6 +156,9 @@ const LikeShareActions = ({
       // Record share
       await blogService.recordShare(postId, user.id);
       setShares(prev => prev + 1);
+      
+      // Don't refresh data automatically to prevent issues
+      // User can refresh page manually if needed
       
       toast({
         title: "Đã sao chép liên kết",
@@ -123,7 +174,13 @@ const LikeShareActions = ({
     }
   };
 
-  const handleSubmitComment = async () => {
+  const handleSubmitComment = async (e?: React.FormEvent) => {
+    // Prevent form submission if this is called from a form
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+
     if (!isAuthenticated || !user) {
       toast({
         title: "Yêu cầu đăng nhập",
@@ -144,7 +201,8 @@ const LikeShareActions = ({
 
     setIsSubmitting(true);
     try {
-      await blogService.addComment(
+      console.log('🔄 Submitting comment...');
+      const result = await blogService.addComment(
         postId, 
         user.id, 
         user.name, 
@@ -152,15 +210,26 @@ const LikeShareActions = ({
         replyTo || undefined
       );
       
-      setCommentText('');
-      setReplyTo(null);
-      setShowCommentForm(false);
-      await loadComments();
-      
-      toast({
-        title: "Bình luận thành công",
-        description: "Cảm ơn bạn đã bình luận!"
-      });
+      if (result) {
+        console.log('✅ Comment submitted successfully');
+        setCommentText('');
+        setReplyTo(null);
+        setShowCommentForm(false);
+        
+        // Reload comments without causing page reload
+        try {
+          await loadComments();
+        } catch (loadError) {
+          console.error('Error reloading comments:', loadError);
+        }
+        
+        toast({
+          title: "Bình luận thành công",
+          description: "Cảm ơn bạn đã bình luận!"
+        });
+      } else {
+        throw new Error('Failed to add comment');
+      }
     } catch (error) {
       console.error('Error submitting comment:', error);
       toast({
@@ -259,7 +328,17 @@ const LikeShareActions = ({
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setShowCommentForm(!showCommentForm)}
+            onClick={() => {
+              if (!isAuthenticated) {
+                toast({
+                  title: "Yêu cầu đăng nhập",
+                  description: "Vui lòng đăng nhập để bình luận",
+                  variant: "destructive"
+                });
+                return;
+              }
+              setShowCommentForm(!showCommentForm);
+            }}
             className="flex items-center gap-2"
           >
             <MessageCircle className="h-4 w-4" />
@@ -316,7 +395,12 @@ const LikeShareActions = ({
                 Hủy
               </Button>
               <Button
-                onClick={handleSubmitComment}
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleSubmitComment();
+                }}
                 disabled={!isAuthenticated || !commentText.trim() || isSubmitting}
               >
                 <Send className="mr-2 h-4 w-4" />

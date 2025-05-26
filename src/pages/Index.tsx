@@ -4,11 +4,14 @@ import Header from '@/components/Header';
 import SearchAndFilter from '@/components/SearchAndFilter';
 import BlogCard from '@/components/BlogCard';
 import { Button } from '@/components/ui/button';
-import { Loader2 } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Loader2, Info } from 'lucide-react';
 import { BlogPost } from '@/data/blogPosts';
 import { blogService } from '@/lib/blogService';
+import { useAuth } from '@/contexts/AuthContext';
 
 const Index = () => {
+  const { isSupabaseEnabled } = useAuth();
   const [posts, setPosts] = useState<BlogPost[]>([]);
   const [filteredPosts, setFilteredPosts] = useState<BlogPost[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -91,6 +94,7 @@ const Index = () => {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12" id="posts">
+        
         <div className="mb-8">
           <h2 className="text-3xl font-bold text-gray-900 mb-4">Bài viết mới nhất</h2>
           <p className="text-gray-600">

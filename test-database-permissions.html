@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Database Permissions Test</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .result { margin: 10px 0; padding: 10px; border-radius: 5px; }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .warning { background: #fff3cd; color: #856404; }
+        button { margin: 5px; padding: 10px 15px; }
+        .section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <h1>🔐 Database Permissions Test</h1>
+    
+    <div class="section">
+        <h2>1. Authentication Test</h2>
+        <button onclick="testAuth()">Test Authentication</button>
+        <button onclick="loginAsAdmin()">Login as Admin</button>
+        <div id="authResults"></div>
+    </div>
+
+    <div class="section">
+        <h2>2. Database Operations Test</h2>
+        <button onclick="testInsert()">Test Insert</button>
+        <button onclick="testUpdate()">Test Update</button>
+        <button onclick="testDelete()">Test Delete</button>
+        <div id="dbResults"></div>
+    </div>
+
+    <div class="section">
+        <h2>3. RLS Policy Test</h2>
+        <button onclick="testRLS()">Test RLS Policies</button>
+        <div id="rlsResults"></div>
+    </div>
+
+    <div id="allResults"></div>
+
+    <script>
+        const SUPABASE_URL = 'https://ebcjduaadxsfrmdkinle.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImViY2pkdWFhZHhzZnJtZGtpbmxlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgxOTEzNDEsImV4cCI6MjA2Mzc2NzM0MX0.Kh4mgvAqisRpfWJRKFnZJj1NuSy-Vj9HC6hqf7bvi8U';
+        
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        let testPostId = null;
+        
+        function addResult(message, type = 'success', containerId = 'allResults') {
+            const div = document.createElement('div');
+            div.className = `result ${type}`;
+            div.textContent = message;
+            document.getElementById(containerId).appendChild(div);
+            console.log(`[${type.toUpperCase()}] ${message}`);
+        }
+
+        async function testAuth() {
+            addResult('🔐 Testing authentication...', 'warning', 'authResults');
+            
+            try {
+                const { data: { user }, error } = await supabase.auth.getUser();
+                
+                if (error) {
+                    addResult(`❌ Auth error: ${error.message}`, 'error', 'authResults');
+                } else if (user) {
+                    addResult(`✅ User authenticated: ${user.email}`, 'success', 'authResults');
+                    addResult(`📋 User ID: ${user.id}`, 'success', 'authResults');
+                    addResult(`📋 User metadata: ${JSON.stringify(user.user_metadata)}`, 'success', 'authResults');
+                } else {
+                    addResult('⚠️ No user authenticated', 'warning', 'authResults');
+                }
+            } catch (err) {
+                addResult(`❌ Auth test error: ${err.message}`, 'error', 'authResults');
+            }
+        }
+
+        async function loginAsAdmin() {
+            addResult('🔑 Attempting admin login...', 'warning', 'authResults');
+            
+            try {
+                const { data, error } = await supabase.auth.signInWithPassword({
+                    email: 'admin@quantblog.com',
+                    password: 'admin123'
+                });
+                
+                if (error) {
+                    addResult(`❌ Login failed: ${error.message}`, 'error', 'authResults');
+                } else {
+                    addResult(`✅ Admin login successful: ${data.user.email}`, 'success', 'authResults');
+                    addResult(`📋 Admin ID: ${data.user.id}`, 'success', 'authResults');
+                    
+                    // Check user profile
+                    const { data: profile, error: profileError } = await supabase
+                        .from('profiles')
+                        .select('*')
+                        .eq('id', data.user.id)
+                        .single();
+                    
+                    if (profileError) {
+                        addResult(`⚠️ Profile check failed: ${profileError.message}`, 'warning', 'authResults');
+                    } else {
+                        addResult(`✅ Profile found: ${profile.name} (${profile.role})`, 'success', 'authResults');
+                    }
+                }
+            } catch (err) {
+                addResult(`❌ Login error: ${err.message}`, 'error', 'authResults');
+            }
+        }
+
+        async function testInsert() {
+            addResult('📝 Testing INSERT operation...', 'warning', 'dbResults');
+            
+            const testPost = {
+                id: `permission-test-${Date.now()}`,
+                title: 'Permission Test Post',
+                content: 'Testing database permissions',
+                excerpt: 'Permission test',
+                author: 'Test User',
+                published_at: new Date().toISOString(),
+                tags: ['test'],
+                read_time: 1,
+                views: 0,
+                likes: 0,
+                shares: 0
+            };
+            
+            try {
+                const { data, error } = await supabase
+                    .from('blog_posts')
+                    .insert([testPost])
+                    .select()
+                    .single();
+                
+                if (error) {
+                    addResult(`❌ INSERT failed: ${error.message}`, 'error', 'dbResults');
+                    addResult(`📋 Error details: ${JSON.stringify(error)}`, 'error', 'dbResults');
+                } else {
+                    testPostId = data.id;
+                    addResult(`✅ INSERT successful: ${data.id}`, 'success', 'dbResults');
+                }
+            } catch (err) {
+                addResult(`❌ INSERT error: ${err.message}`, 'error', 'dbResults');
+            }
+        }
+
+        async function testUpdate() {
+            if (!testPostId) {
+                addResult('⚠️ No test post to update. Run INSERT test first.', 'warning', 'dbResults');
+                return;
+            }
+            
+            addResult('✏️ Testing UPDATE operation...', 'warning', 'dbResults');
+            
+            try {
+                const { data, error } = await supabase
+                    .from('blog_posts')
+                    .update({ 
+                        title: 'Updated Permission Test Post',
+                        updated_at: new Date().toISOString()
+                    })
+                    .eq('id', testPostId)
+                    .select()
+                    .single();
+                
+                if (error) {
+                    addResult(`❌ UPDATE failed: ${error.message}`, 'error', 'dbResults');
+                    addResult(`📋 Error details: ${JSON.stringify(error)}`, 'error', 'dbResults');
+                } else {
+                    addResult(`✅ UPDATE successful: ${data.title}`, 'success', 'dbResults');
+                }
+            } catch (err) {
+                addResult(`❌ UPDATE error: ${err.message}`, 'error', 'dbResults');
+            }
+        }
+
+        async function testDelete() {
+            if (!testPostId) {
+                addResult('⚠️ No test post to delete. Run INSERT test first.', 'warning', 'dbResults');
+                return;
+            }
+            
+            addResult('🗑️ Testing DELETE operation...', 'warning', 'dbResults');
+            
+            try {
+                // First try to delete related data
+                await supabase.from('post_interactions').delete().eq('post_id', testPostId);
+                await supabase.from('comments').delete().eq('post_id', testPostId);
+                
+                // Then delete the post
+                const { error } = await supabase
+                    .from('blog_posts')
+                    .delete()
+                    .eq('id', testPostId);
+                
+                if (error) {
+                    addResult(`❌ DELETE failed: ${error.message}`, 'error', 'dbResults');
+                    addResult(`📋 Error details: ${JSON.stringify(error)}`, 'error', 'dbResults');
+                } else {
+                    addResult(`✅ DELETE successful: ${testPostId}`, 'success', 'dbResults');
+                    testPostId = null;
+                }
+            } catch (err) {
+                addResult(`❌ DELETE error: ${err.message}`, 'error', 'dbResults');
+            }
+        }
+
+        async function testRLS() {
+            addResult('🛡️ Testing RLS policies...', 'warning', 'rlsResults');
+            
+            try {
+                // Test blog_posts table
+                const { data: posts, error: postsError } = await supabase
+                    .from('blog_posts')
+                    .select('id, title')
+                    .limit(1);
+                
+                if (postsError) {
+                    addResult(`❌ blog_posts RLS: ${postsError.message}`, 'error', 'rlsResults');
+                } else {
+                    addResult(`✅ blog_posts RLS: Can read ${posts.length} posts`, 'success', 'rlsResults');
+                }
+                
+                // Test comments table
+                const { data: comments, error: commentsError } = await supabase
+                    .from('comments')
+                    .select('id')
+                    .limit(1);
+                
+                if (commentsError) {
+                    addResult(`❌ comments RLS: ${commentsError.message}`, 'error', 'rlsResults');
+                } else {
+                    addResult(`✅ comments RLS: Can read ${comments.length} comments`, 'success', 'rlsResults');
+                }
+                
+                // Test post_interactions table
+                const { data: interactions, error: interactionsError } = await supabase
+                    .from('post_interactions')
+                    .select('id')
+                    .limit(1);
+                
+                if (interactionsError) {
+                    addResult(`❌ post_interactions RLS: ${interactionsError.message}`, 'error', 'rlsResults');
+                } else {
+                    addResult(`✅ post_interactions RLS: Can read ${interactions.length} interactions`, 'success', 'rlsResults');
+                }
+                
+                // Test profiles table
+                const { data: profiles, error: profilesError } = await supabase
+                    .from('profiles')
+                    .select('id, role')
+                    .limit(1);
+                
+                if (profilesError) {
+                    addResult(`❌ profiles RLS: ${profilesError.message}`, 'error', 'rlsResults');
+                } else {
+                    addResult(`✅ profiles RLS: Can read ${profiles.length} profiles`, 'success', 'rlsResults');
+                }
+                
+            } catch (err) {
+                addResult(`❌ RLS test error: ${err.message}`, 'error', 'rlsResults');
+            }
+        }
+
+        // Auto test on load
+        window.onload = () => {
+            addResult('🚀 Starting database permissions test...', 'warning');
+            testAuth();
+        };
+    </script>
+</body>
+</html> 

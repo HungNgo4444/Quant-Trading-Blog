@@ -16,6 +16,7 @@ export interface SupabaseBlogPost {
   views?: number;
   likes?: number;
   shares?: number;
+  is_hidden?: boolean;
   created_at?: string;
 }
 
@@ -61,7 +62,8 @@ const convertToBlogPost = (supabasePost: SupabaseBlogPost): BlogPost => ({
   readTime: supabasePost.read_time,
   views: supabasePost.views || 0,
   likes: supabasePost.likes || 0,
-  shares: supabasePost.shares || 0
+  shares: supabasePost.shares || 0,
+  isHidden: supabasePost.is_hidden || false
 });
 
 // Convert BlogPost format to Supabase format
@@ -78,7 +80,8 @@ const convertToSupabasePost = (blogPost: Partial<BlogPost>): Partial<SupabaseBlo
   read_time: blogPost.readTime,
   views: blogPost.views,
   likes: blogPost.likes,
-  shares: blogPost.shares
+  shares: blogPost.shares,
+  is_hidden: blogPost.isHidden
 });
 
 export const supabaseService = {
@@ -284,12 +287,18 @@ Backtesting giúp đánh giá chiến lược trước khi áp dụng thực t�
   },
 
   // Posts CRUD
-  async getAllPosts(): Promise<BlogPost[]> {
+  async getAllPosts(includeHidden: boolean = false): Promise<BlogPost[]> {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('blog_posts')
-        .select('*')
-        .order('published_at', { ascending: false });
+        .select('*');
+      
+      // Filter out hidden posts unless explicitly requested
+      if (!includeHidden) {
+        query = query.eq('is_hidden', false);
+      }
+      
+      const { data, error } = await query.order('published_at', { ascending: false });
 
       if (error) throw error;
 
@@ -319,14 +328,19 @@ Backtesting giúp đánh giá chiến lược trước khi áp dụng thực t�
 
   async createPost(postData: Omit<BlogPost, 'id' | 'publishedAt'>): Promise<BlogPost | null> {
     try {
+      // Generate unique ID using timestamp + random string
+      const uniqueId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      
       const newPost = {
         ...convertToSupabasePost(postData),
-        id: Date.now().toString(),
+        id: uniqueId,
         published_at: new Date().toISOString(),
         views: 0,
         likes: 0,
         shares: 0
       };
+
+      console.log('📝 Creating new post:', newPost.title, 'with ID:', uniqueId);
 
       const { data, error } = await supabase
         .from('blog_posts')
@@ -334,8 +348,12 @@ Backtesting giúp đánh giá chiến lược trước khi áp dụng thực t�
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error creating post:', error);
+        throw error;
+      }
 
+      console.log('✅ Post created successfully:', data.id);
       return data ? convertToBlogPost(data) : null;
     } catch (error) {
       console.error('Error creating post:', error);
@@ -368,20 +386,78 @@ Backtesting giúp đánh giá chiến lược trước khi áp dụng thực t�
 
   async deletePost(id: string): Promise<boolean> {
     try {
-      const { error } = await supabase
+      console.log(`🗑️ Deleting post ${id} and related data...`);
+      
+      // First delete related interactions and comments (foreign key constraints)
+      const { error: interactionsError } = await supabase
+        .from('post_interactions')
+        .delete()
+        .eq('post_id', id);
+      
+      if (interactionsError) {
+        console.error('Error deleting interactions:', interactionsError);
+      }
+
+      const { error: commentsError } = await supabase
+        .from('comments')
+        .delete()
+        .eq('post_id', id);
+      
+      if (commentsError) {
+        console.error('Error deleting comments:', commentsError);
+      }
+
+      // Then delete the post itself
+      const { error: postError } = await supabase
         .from('blog_posts')
         .delete()
         .eq('id', id);
 
-      if (error) throw error;
+      if (postError) {
+        console.error('Error deleting post:', postError);
+        throw postError;
+      }
 
-      // Also delete related interactions and comments
-      await supabase.from('post_interactions').delete().eq('post_id', id);
-      await supabase.from('comments').delete().eq('post_id', id);
-
+      console.log(`✅ Post ${id} deleted successfully`);
       return true;
     } catch (error) {
       console.error('Error deleting post:', error);
+      return false;
+    }
+  },
+
+  async togglePostVisibility(id: string): Promise<boolean> {
+    try {
+      console.log(`👁️ Toggling visibility for post ${id}...`);
+      
+      // Get current status
+      const { data: post, error: getError } = await supabase
+        .from('blog_posts')
+        .select('is_hidden')
+        .eq('id', id)
+        .single();
+
+      if (getError) {
+        console.error('Error getting post visibility:', getError);
+        throw getError;
+      }
+
+      // Toggle visibility
+      const newHiddenStatus = !post.is_hidden;
+      const { error: updateError } = await supabase
+        .from('blog_posts')
+        .update({ is_hidden: newHiddenStatus })
+        .eq('id', id);
+
+      if (updateError) {
+        console.error('Error updating post visibility:', updateError);
+        throw updateError;
+      }
+
+      console.log(`✅ Post ${id} ${newHiddenStatus ? 'hidden' : 'shown'} successfully`);
+      return true;
+    } catch (error) {
+      console.error('Error toggling post visibility:', error);
       return false;
     }
   },
@@ -418,40 +494,67 @@ Backtesting giúp đánh giá chiến lược trước khi áp dụng thực t�
 
   async toggleLike(postId: string, userId: string): Promise<boolean> {
     try {
+      console.log(`❤️ Toggling like for post ${postId} by user ${userId}`);
+      
       // Check if already liked
-      const { data: existingLike } = await supabase
+      const { data: existingLike, error: checkError } = await supabase
         .from('post_interactions')
         .select('id')
         .eq('post_id', postId)
         .eq('user_id', userId)
         .eq('type', 'like')
-        .single();
+        .maybeSingle();
+
+      if (checkError) {
+        console.error('Error checking like status:', checkError);
+        throw checkError;
+      }
 
       if (existingLike) {
+        console.log('🔄 Removing like...');
         // Remove like
-        await supabase
+        const { error: deleteError } = await supabase
           .from('post_interactions')
           .delete()
           .eq('id', existingLike.id);
 
+        if (deleteError) {
+          console.error('Error removing like:', deleteError);
+          throw deleteError;
+        }
+
         // Decrease likes count
-        const { data: post } = await supabase
+        const { data: post, error: getPostError } = await supabase
           .from('blog_posts')
           .select('likes')
           .eq('id', postId)
           .single();
 
+        if (getPostError) {
+          console.error('Error getting post for like count:', getPostError);
+          throw getPostError;
+        }
+
         if (post) {
-          await supabase
+          const newLikesCount = Math.max(0, (post.likes || 0) - 1);
+          const { error: updateError } = await supabase
             .from('blog_posts')
-            .update({ likes: Math.max(0, (post.likes || 0) - 1) })
+            .update({ likes: newLikesCount })
             .eq('id', postId);
+
+          if (updateError) {
+            console.error('Error updating likes count:', updateError);
+            throw updateError;
+          }
+          
+          console.log(`✅ Like removed. New count: ${newLikesCount}`);
         }
 
         return false; // Unliked
       } else {
+        console.log('➕ Adding like...');
         // Add like
-        await supabase
+        const { error: insertError } = await supabase
           .from('post_interactions')
           .insert([{
             post_id: postId,
@@ -459,32 +562,52 @@ Backtesting giúp đánh giá chiến lược trước khi áp dụng thực t�
             type: 'like'
           }]);
 
+        if (insertError) {
+          console.error('Error adding like:', insertError);
+          throw insertError;
+        }
+
         // Increase likes count
-        const { data: post } = await supabase
+        const { data: post, error: getPostError } = await supabase
           .from('blog_posts')
           .select('likes')
           .eq('id', postId)
           .single();
 
+        if (getPostError) {
+          console.error('Error getting post for like count:', getPostError);
+          throw getPostError;
+        }
+
         if (post) {
-          await supabase
+          const newLikesCount = (post.likes || 0) + 1;
+          const { error: updateError } = await supabase
             .from('blog_posts')
-            .update({ likes: (post.likes || 0) + 1 })
+            .update({ likes: newLikesCount })
             .eq('id', postId);
+
+          if (updateError) {
+            console.error('Error updating likes count:', updateError);
+            throw updateError;
+          }
+          
+          console.log(`✅ Like added. New count: ${newLikesCount}`);
         }
 
         return true; // Liked
       }
     } catch (error) {
       console.error('Error toggling like:', error);
-      return false;
+      return false; // Return false instead of throwing to prevent UI crashes
     }
   },
 
   async recordShare(postId: string, userId: string): Promise<void> {
     try {
+      console.log(`📤 Recording share for post ${postId} by user ${userId}`);
+      
       // Insert interaction
-      await supabase
+      const { error: insertError } = await supabase
         .from('post_interactions')
         .insert([{
           post_id: postId,
@@ -492,21 +615,67 @@ Backtesting giúp đánh giá chiến lược trước khi áp dụng thực t�
           type: 'share'
         }]);
 
+      if (insertError) {
+        console.error('Error inserting share interaction:', insertError);
+        throw insertError;
+      }
+
       // Update post shares count
-      const { data: post } = await supabase
+      const { data: post, error: getPostError } = await supabase
         .from('blog_posts')
         .select('shares')
         .eq('id', postId)
         .single();
 
+      if (getPostError) {
+        console.error('Error getting post for share count:', getPostError);
+        throw getPostError;
+      }
+
       if (post) {
-        await supabase
+        const newSharesCount = (post.shares || 0) + 1;
+        const { error: updateError } = await supabase
           .from('blog_posts')
-          .update({ shares: (post.shares || 0) + 1 })
+          .update({ shares: newSharesCount })
           .eq('id', postId);
+
+        if (updateError) {
+          console.error('Error updating shares count:', updateError);
+          throw updateError;
+        }
+        
+        console.log(`✅ Share recorded. New count: ${newSharesCount}`);
       }
     } catch (error) {
       console.error('Error recording share:', error);
+      // Don't throw error to prevent UI crashes
+    }
+  },
+
+  // Check if user has liked a post
+  async checkUserLikeStatus(postId: string, userId: string): Promise<boolean> {
+    try {
+      console.log(`🔍 Checking like status for post ${postId} by user ${userId}`);
+      
+      const { data, error } = await supabase
+        .from('post_interactions')
+        .select('id')
+        .eq('post_id', postId)
+        .eq('user_id', userId)
+        .eq('type', 'like')
+        .maybeSingle();
+
+      if (error) {
+        console.error('Error checking like status:', error);
+        return false;
+      }
+
+      const isLiked = !!data;
+      console.log(`✅ Like status for post ${postId}: ${isLiked ? 'LIKED' : 'NOT LIKED'}`);
+      return isLiked;
+    } catch (error) {
+      console.error('Error checking like status:', error);
+      return false;
     }
   },
 
@@ -530,20 +699,28 @@ Backtesting giúp đánh giá chiến lược trước khi áp dụng thực t�
 
   async addComment(postId: string, userId: string, userName: string, content: string, parentId?: string): Promise<Comment | null> {
     try {
+      console.log(`💬 Adding comment to post ${postId} by user ${userName}`);
+      
+      const commentData = {
+        post_id: postId,
+        user_id: userId,
+        user_name: userName,
+        content: content.trim(),
+        parent_id: parentId || null
+      };
+
       const { data, error } = await supabase
         .from('comments')
-        .insert([{
-          post_id: postId,
-          user_id: userId,
-          user_name: userName,
-          content,
-          parent_id: parentId
-        }])
+        .insert([commentData])
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error adding comment:', error);
+        throw error;
+      }
 
+      console.log(`✅ Comment added successfully:`, data.id);
       return data;
     } catch (error) {
       console.error('Error adding comment:', error);
