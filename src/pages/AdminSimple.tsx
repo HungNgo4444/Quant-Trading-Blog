@@ -210,7 +210,7 @@ const AdminSimple = () => {
               {post.isHidden && (
                 <Badge variant="destructive" className="text-xs">ẨN</Badge>
               )}
-            </div>
+          </div>
             <p className="text-gray-600 mb-3 line-clamp-2">{post.excerpt}</p>
             
             <div className="flex items-center gap-4 text-sm text-gray-500 mb-3">
@@ -249,42 +249,42 @@ const AdminSimple = () => {
           </div>
           
           <div className="flex items-center gap-2 ml-4">
-            <Button
-              variant="outline"
-              size="sm"
+                        <Button
+                          variant="outline"
+                          size="sm"
               onClick={() => navigate(`/post/${post.id}`)}
-              title="Xem bài viết"
-            >
-              <Eye className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handleEditPost(post)}
-              title="Chỉnh sửa"
-            >
-              <Edit className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
+                          title="Xem bài viết"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleEditPost(post)}
+                          title="Chỉnh sửa"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
               onClick={() => handleToggleVisibility(post.id, post.isHidden || false)}
               className={post.isHidden ? "text-green-600 hover:text-green-700" : "text-orange-600 hover:text-orange-700"}
               title={post.isHidden ? "Hiển thị bài viết" : "Ẩn bài viết"}
             >
               {post.isHidden ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handleDeletePost(post.id)}
-              className="text-red-600 hover:text-red-700"
-              title="Xóa bài viết"
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleDeletePost(post.id)}
+                          className="text-red-600 hover:text-red-700"
+                          title="Xóa bài viết"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
       </CardContent>
     </Card>
   );
@@ -345,8 +345,8 @@ const AdminSimple = () => {
                 ) : (
                   <div className="grid gap-4">
                     {posts.map((post) => renderPostCard(post, false))}
-                  </div>
-                )}
+                </div>
+              )}
               </TabsContent>
 
               <TabsContent value="hidden" className="space-y-4 mt-6">
@@ -356,8 +356,8 @@ const AdminSimple = () => {
                       <EyeOff className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                       <h3 className="text-lg font-semibold text-gray-600 mb-2">Không có bài viết ẩn</h3>
                       <p className="text-gray-500">Tất cả bài viết đang được hiển thị công khai</p>
-                    </CardContent>
-                  </Card>
+            </CardContent>
+          </Card>
                 ) : (
                   <div className="grid gap-4">
                     {hiddenPosts.map((post) => renderPostCard(post, true))}
@@ -498,8 +498,8 @@ const AdminSimple = () => {
             >
               <Shield className="h-4 w-4" />
               Quay lại Admin Safe
-            </Button>
-          </div>
+                    </Button>
+                  </div>
         </div>
       </div>
     </div>

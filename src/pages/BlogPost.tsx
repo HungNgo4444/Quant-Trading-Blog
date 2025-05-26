@@ -37,10 +37,8 @@ const BlogPost = () => {
       
       setPost(postData);
       
-      // Record view if user is logged in
-      if (user) {
-        await blogService.recordView(postId, user.id);
-      }
+      // Record view for both logged in and anonymous users
+      await blogService.recordView(postId, user?.id);
       
       // Load related posts (posts with similar tags)
       if (postData.tags.length > 0) {

@@ -108,13 +108,23 @@ export const blogService = {
   },
 
   // Interactions
-  async recordView(postId: string, userId: string): Promise<void> {
+  async recordView(postId: string, userId?: string): Promise<void> {
     try {
       const supabaseService = await getSupabaseService();
       await supabaseService.recordView(postId, userId);
     } catch (error) {
       console.error('Error recording view:', error);
-      throw error;
+      // Don't throw error to prevent UI crashes
+    }
+  },
+
+  // Clean up old view records (call this on app initialization)
+  async cleanupOldViewRecords(): Promise<void> {
+    try {
+      const supabaseService = await getSupabaseService();
+      supabaseService.cleanupOldViewRecords();
+    } catch (error) {
+      console.error('Error cleaning up old view records:', error);
     }
   },
 

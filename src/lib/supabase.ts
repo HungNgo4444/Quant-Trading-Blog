@@ -16,6 +16,21 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Missing Supabase configuration in src/config/supabase.ts');
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Get current site URL for auth redirects
+const getCurrentSiteUrl = () => {
+  if (typeof window !== 'undefined') {
+    return window.location.origin;
+  }
+  return 'http://localhost:8080'; // fallback for SSR
+};
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: true,
+    flowType: 'pkce'
+  }
+});
 
 export default supabase; 

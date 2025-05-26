@@ -1,6 +1,8 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { useEffect } from 'react';
 import { Toaster } from '@/components/ui/toaster';
 import { AuthProvider } from '@/contexts/AuthContext';
+import { blogService } from '@/lib/blogService';
 import Index from '@/pages/Index';
 import BlogPost from '@/pages/BlogPost';
 import About from '@/pages/About';
@@ -11,6 +13,11 @@ import Profile from '@/pages/Profile';
 import Settings from '@/pages/Settings';
 
 function App() {
+  // Clean up old view records on app initialization
+  useEffect(() => {
+    blogService.cleanupOldViewRecords();
+  }, []);
+
   return (
     <AuthProvider>
       <Router>

@@ -16,7 +16,8 @@ const Index = () => {
   const [filteredPosts, setFilteredPosts] = useState<BlogPost[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedTag, setSelectedTag] = useState('');
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [selectedTopics, setSelectedTopics] = useState<string[]>([]);
 
   useEffect(() => {
     loadPosts();
@@ -37,40 +38,78 @@ const Index = () => {
 
   const handleSearch = async (query: string) => {
     setSearchQuery(query);
-    setSelectedTag(''); // Clear tag filter when searching
-    
-    if (!query.trim()) {
-      setFilteredPosts(posts);
-      return;
-    }
-
-    try {
-      const searchResults = await blogService.searchPosts(query);
-      setFilteredPosts(searchResults);
-    } catch (error) {
-      console.error('Error searching posts:', error);
-    }
+    applyFilters(query, selectedTags, selectedTopics);
   };
 
-  const handleTagFilter = async (tag: string) => {
-    setSelectedTag(tag);
-    setSearchQuery(''); // Clear search when filtering by tag
-    
-    if (!tag) {
-      setFilteredPosts(posts);
-      return;
-    }
+  const handleTagFilter = async (tags: string[]) => {
+    setSelectedTags(tags);
+    applyFilters(searchQuery, tags, selectedTopics);
+  };
 
+  const handleTopicFilter = async (topics: string[]) => {
+    setSelectedTopics(topics);
+    applyFilters(searchQuery, selectedTags, topics);
+  };
+
+  const applyFilters = async (query: string, tags: string[], topics: string[]) => {
     try {
-      const tagResults = await blogService.getPostsByTag(tag);
-      setFilteredPosts(tagResults);
+      let filtered = [...posts];
+
+      // Apply search filter
+      if (query.trim()) {
+        const searchResults = await blogService.searchPosts(query);
+        filtered = searchResults;
+      }
+
+      // Apply tag filter
+      if (tags.length > 0) {
+        filtered = filtered.filter(post => 
+          tags.some(tag => post.tags.includes(tag))
+        );
+      }
+
+      // Apply topic filter (assuming topics are a subset of tags or a separate field)
+      if (topics.length > 0) {
+        filtered = filtered.filter(post => 
+          topics.some(topic => 
+            post.tags.includes(topic) || 
+            post.title.toLowerCase().includes(topic.toLowerCase()) ||
+            post.excerpt.toLowerCase().includes(topic.toLowerCase())
+          )
+        );
+      }
+
+      setFilteredPosts(filtered);
     } catch (error) {
-      console.error('Error filtering by tag:', error);
+      console.error('Error applying filters:', error);
     }
   };
 
   // Get all unique tags from posts
   const allTags = Array.from(new Set(posts.flatMap(post => post.tags)));
+  
+  // Define available topics (categories)
+  const availableTopics = [
+    'Quantitative Trading',
+    'Python',
+    'Machine Learning', 
+    'Data Analysis',
+    'Backtesting',
+    'Strategy',
+    'Programming',
+    'Tài chính',
+    'Phân tích dữ liệu',
+    'Giao dịch định lượng'
+  ];
+
+  const clearAllFilters = () => {
+    setSearchQuery('');
+    setSelectedTags([]);
+    setSelectedTopics([]);
+    setFilteredPosts(posts);
+  };
+
+  const hasActiveFilters = searchQuery || selectedTags.length > 0 || selectedTopics.length > 0;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -90,8 +129,6 @@ const Index = () => {
         </div>
       </section>
 
-
-
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12" id="posts">
         
@@ -107,34 +144,49 @@ const Index = () => {
           <SearchAndFilter
             onSearch={handleSearch}
             onTagFilter={handleTagFilter}
+            onTopicFilter={handleTopicFilter}
             availableTags={allTags}
+            availableTopics={availableTopics}
             searchQuery={searchQuery}
-            selectedTag={selectedTag}
+            selectedTags={selectedTags}
+            selectedTopics={selectedTopics}
           />
         </div>
 
         {/* Results Info */}
-        {(searchQuery || selectedTag) && (
+        {hasActiveFilters && (
           <div className="mb-6">
-            <p className="text-gray-600">
-              {searchQuery && `Kết quả tìm kiếm cho "${searchQuery}": `}
-              {selectedTag && `Bài viết với tag "${selectedTag}": `}
-              <span className="font-semibold">{filteredPosts.length} bài viết</span>
-            </p>
-            {(searchQuery || selectedTag) && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setSearchQuery('');
-                  setSelectedTag('');
-                  setFilteredPosts(posts);
-                }}
-                className="mt-2"
-              >
-                Xóa bộ lọc
-              </Button>
-            )}
+            <div className="flex flex-wrap items-center gap-2 mb-2">
+              <span className="text-gray-600">Kết quả lọc:</span>
+              <span className="font-semibold text-blue-600">{filteredPosts.length} bài viết</span>
+              
+              {searchQuery && (
+                <span className="text-sm text-gray-500">
+                  • Tìm kiếm: "{searchQuery}"
+                </span>
+              )}
+              
+              {selectedTopics.length > 0 && (
+                <span className="text-sm text-gray-500">
+                  • Chủ đề: {selectedTopics.join(', ')}
+                </span>
+              )}
+              
+              {selectedTags.length > 0 && (
+                <span className="text-sm text-gray-500">
+                  • Tags: {selectedTags.join(', ')}
+                </span>
+              )}
+            </div>
+            
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={clearAllFilters}
+              className="mt-2"
+            >
+              Xóa tất cả bộ lọc
+            </Button>
           </div>
         )}
 
@@ -153,19 +205,15 @@ const Index = () => {
         ) : (
           <div className="text-center py-12">
             <div className="text-gray-500 mb-4">
-              {searchQuery || selectedTag 
-                ? 'Không tìm thấy bài viết nào phù hợp với tiêu chí tìm kiếm.'
+              {hasActiveFilters 
+                ? 'Không tìm thấy bài viết nào phù hợp với tiêu chí lọc.'
                 : 'Chưa có bài viết nào.'
               }
             </div>
-            {(searchQuery || selectedTag) && (
+            {hasActiveFilters && (
               <Button
                 variant="outline"
-                onClick={() => {
-                  setSearchQuery('');
-                  setSelectedTag('');
-                  setFilteredPosts(posts);
-                }}
+                onClick={clearAllFilters}
               >
                 Xem tất cả bài viết
               </Button>
@@ -195,15 +243,15 @@ const Index = () => {
             </div>
             
             <div>
-              <h3 className="text-lg font-semibold mb-4">Chủ đề</h3>
+              <h3 className="text-lg font-semibold mb-4">Chủ đề phổ biến</h3>
               <div className="flex flex-wrap gap-2">
-                {allTags.slice(0, 6).map((tag) => (
+                {availableTopics.slice(0, 6).map((topic) => (
                   <button
-                    key={tag}
-                    onClick={() => handleTagFilter(tag)}
+                    key={topic}
+                    onClick={() => handleTopicFilter([topic])}
                     className="text-sm bg-gray-800 hover:bg-gray-700 px-3 py-1 rounded-full transition-colors"
                   >
-                    {tag}
+                    {topic}
                   </button>
                 ))}
               </div>

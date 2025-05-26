@@ -8,8 +8,9 @@ interface AuthContextType extends AuthState {
   logout: () => void;
   verifyEmail: (email: string, code: string) => Promise<AuthResponse>;
   resendVerificationCode: (email: string) => Promise<AuthResponse>;
+  resetPassword: (email: string) => Promise<AuthResponse>;
+  updatePassword: (password: string) => Promise<AuthResponse>;
   updateProfile: (data: any) => Promise<void>;
-  updatePassword: (password: string) => Promise<void>;
   deleteAccount: () => Promise<void>;
   isAdmin: boolean;
   isSupabaseEnabled: boolean;
@@ -37,6 +38,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   });
 
   const isSupabaseEnabled = isSupabaseConfigured();
+  
+  // Get current site URL for redirects
+  const getCurrentSiteUrl = () => {
+    if (typeof window !== 'undefined') {
+      return window.location.origin;
+    }
+    return 'http://localhost:8080';
+  };
   
   // Lazy load Supabase only when needed and available
   const getSupabase = async () => {
@@ -73,6 +82,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       if (error) {
         setAuthState(prev => ({ ...prev, isLoading: false }));
+        
+        // Handle specific auth errors
+        if (error.message.includes('Email not confirmed')) {
+          return {
+            success: false,
+            message: "Email chưa được xác thực. Vui lòng kiểm tra email và xác thực tài khoản trước khi đăng nhập.",
+            requiresEmailVerification: true
+          };
+        }
+        
         return {
           success: false,
           message: error.message === 'Invalid login credentials' 
@@ -127,28 +146,41 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const register = async (credentials: RegisterCredentials): Promise<AuthResponse> => {
     try {
-      // FORCE DATABASE MODE - NO MOCK
       const supabase = await getSupabase();
+      
+      // Register with email confirmation
       const { data, error } = await supabase.auth.signUp({
         email: credentials.email,
         password: credentials.password,
         options: {
           data: {
             name: credentials.name,
-          }
+          },
+          emailRedirectTo: `${getCurrentSiteUrl()}/auth?tab=login&verified=true`
         }
       });
 
       if (error) {
         return {
           success: false,
-          message: error.message
+          message: error.message === 'User already registered' 
+            ? "Email này đã được đăng ký. Vui lòng sử dụng email khác hoặc đăng nhập."
+            : error.message
+        };
+      }
+
+      // Check if user needs email confirmation
+      if (data.user && !data.user.email_confirmed_at) {
+        return {
+          success: true,
+          message: "Đăng ký thành công! Vui lòng kiểm tra email để xác thực tài khoản trước khi đăng nhập.",
+          requiresEmailVerification: true
         };
       }
 
       return {
         success: true,
-        message: "Đăng ký thành công! Vui lòng kiểm tra email để xác thực tài khoản."
+        message: "Đăng ký thành công! Bạn có thể đăng nhập ngay bây giờ."
       };
     } catch (error) {
       console.error('Register error:', error);
@@ -161,7 +193,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const logout = async () => {
     try {
-      // FORCE DATABASE MODE - NO MOCK
       const supabase = await getSupabase();
       await supabase.auth.signOut();
     } catch (error) {
@@ -177,9 +208,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const verifyEmail = async (email: string, code: string): Promise<AuthResponse> => {
     try {
-      // FORCE DATABASE MODE - NO MOCK
       const supabase = await getSupabase();
-      const { error } = await supabase.auth.verifyOtp({
+      const { data, error } = await supabase.auth.verifyOtp({
         email,
         token: code,
         type: 'signup'
@@ -188,13 +218,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       if (error) {
         return {
           success: false,
-          message: error.message
+          message: error.message === 'Token has expired or is invalid'
+            ? "Mã xác thực đã hết hạn hoặc không hợp lệ. Vui lòng yêu cầu mã mới."
+            : error.message
         };
       }
 
       return {
         success: true,
-        message: "Email đã được xác thực thành công"
+        message: "Email đã được xác thực thành công! Bạn có thể đăng nhập ngay bây giờ."
       };
     } catch (error) {
       console.error('Email verification error:', error);
@@ -207,11 +239,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const resendVerificationCode = async (email: string): Promise<AuthResponse> => {
     try {
-      // FORCE DATABASE MODE - NO MOCK
       const supabase = await getSupabase();
       const { error } = await supabase.auth.resend({
         type: 'signup',
-        email
+        email,
+        options: {
+          emailRedirectTo: `${getCurrentSiteUrl()}/auth?tab=login&verified=true`
+        }
       });
 
       if (error) {
@@ -223,7 +257,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       return {
         success: true,
-        message: "Mã xác thực đã được gửi lại"
+        message: "Mã xác thực đã được gửi lại đến email của bạn"
       };
     } catch (error) {
       console.error('Resend verification error:', error);
@@ -234,9 +268,64 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
+  const resetPassword = async (email: string): Promise<AuthResponse> => {
+    try {
+      const supabase = await getSupabase();
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${getCurrentSiteUrl()}/reset-password`
+      });
+
+      if (error) {
+        return {
+          success: false,
+          message: error.message
+        };
+      }
+
+      return {
+        success: true,
+        message: "Link đặt lại mật khẩu đã được gửi đến email của bạn"
+      };
+    } catch (error) {
+      console.error('Reset password error:', error);
+      return {
+        success: false,
+        message: "Đã xảy ra lỗi khi gửi link đặt lại mật khẩu: " + (error as Error).message
+      };
+    }
+  };
+
+  const updatePassword = async (password: string): Promise<AuthResponse> => {
+    try {
+      const supabase = await getSupabase();
+      const { data, error } = await supabase.auth.updateUser({
+        password: password
+      });
+
+      if (error) {
+        return {
+          success: false,
+          message: error.message === 'New password should be different from the old password'
+            ? "Mật khẩu mới phải khác với mật khẩu cũ"
+            : error.message
+        };
+      }
+
+      return {
+        success: true,
+        message: "Mật khẩu đã được cập nhật thành công"
+      };
+    } catch (error) {
+      console.error('Update password error:', error);
+      return {
+        success: false,
+        message: "Đã xảy ra lỗi khi cập nhật mật khẩu: " + (error as Error).message
+      };
+    }
+  };
+
   const updateProfile = async (data: any): Promise<void> => {
     try {
-      // FORCE DATABASE MODE - NO MOCK
       const supabase = await getSupabase();
       const { error } = await supabase
         .from('profiles')
@@ -252,26 +341,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  const updatePassword = async (password: string): Promise<void> => {
-    try {
-      // FORCE DATABASE MODE - NO MOCK
-      const supabase = await getSupabase();
-      const { error } = await supabase.auth.updateUser({
-        password
-      });
-
-      if (error) {
-        throw error;
-      }
-    } catch (error) {
-      console.error('Update password error:', error);
-      throw error;
-    }
-  };
-
   const deleteAccount = async (): Promise<void> => {
     try {
-      // FORCE DATABASE MODE - NO MOCK
       const supabase = await getSupabase();
       // Note: Supabase doesn't have a direct delete user method
       // This would typically be handled by a server function
@@ -283,11 +354,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  // Initialize auth state - FORCE DATABASE MODE
+  // Initialize auth state
   useEffect(() => {
     const initializeAuth = async () => {
       try {
-        // FORCE DATABASE MODE - NO MOCK
         const supabase = await getSupabase();
         const { data: { session } } = await supabase.auth.getSession();
         
@@ -316,6 +386,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         // Listen for auth changes
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
           async (event, session) => {
+            console.log('Auth state changed:', event, session?.user?.email);
+            
             if (session?.user) {
               const { data: profile } = await supabase
                 .from('profiles')
@@ -369,8 +441,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     logout,
     verifyEmail,
     resendVerificationCode,
-    updateProfile,
+    resetPassword,
     updatePassword,
+    updateProfile,
     deleteAccount,
     isAdmin,
     isSupabaseEnabled,

@@ -463,16 +463,37 @@ Backtesting giúp đánh giá chiến lược trước khi áp dụng thực t�
   },
 
   // Interactions
-  async recordView(postId: string, userId: string): Promise<void> {
+  async recordView(postId: string, userId?: string): Promise<void> {
     try {
-      // Insert interaction
-      await supabase
-        .from('post_interactions')
-        .insert([{
-          post_id: postId,
-          user_id: userId,
-          type: 'view'
-        }]);
+      if (userId) {
+        // Logged in user - check for duplicate views today
+        const today = new Date().toISOString().split('T')[0];
+        const { data: existingView } = await supabase
+          .from('post_interactions')
+          .select('id')
+          .eq('post_id', postId)
+          .eq('user_id', userId)
+          .eq('type', 'view')
+          .gte('created_at', `${today}T00:00:00.000Z`)
+          .maybeSingle();
+
+        if (existingView) {
+          console.log('User already viewed this post today');
+          return;
+        }
+
+        // Insert interaction for logged in user
+        await supabase
+          .from('post_interactions')
+          .insert([{
+            post_id: postId,
+            user_id: userId,
+            type: 'view'
+          }]);
+      } else {
+        // Anonymous user - use session-based tracking
+        await this.recordAnonymousView(postId);
+      }
 
       // Update post views count
       const { data: post } = await supabase
@@ -489,6 +510,67 @@ Backtesting giúp đánh giá chiến lược trước khi áp dụng thực t�
       }
     } catch (error) {
       console.error('Error recording view:', error);
+    }
+  },
+
+  async recordAnonymousView(postId: string): Promise<void> {
+    try {
+      // Generate or get session ID for anonymous user
+      const sessionId = this.getOrCreateSessionId();
+      
+      // Check if this session already viewed this post today
+      const today = new Date().toISOString().split('T')[0];
+      const viewKey = `view_${postId}_${sessionId}_${today}`;
+      
+      if (localStorage.getItem(viewKey)) {
+        console.log('Anonymous user already viewed this post today');
+        return;
+      }
+
+      // Mark as viewed in localStorage
+      localStorage.setItem(viewKey, 'true');
+      
+      // Optional: Store anonymous view in database for analytics
+      await supabase
+        .from('post_interactions')
+        .insert([{
+          post_id: postId,
+          user_id: `anonymous_${sessionId}`,
+          type: 'view'
+        }]);
+
+      console.log(`✅ Anonymous view recorded for post ${postId}`);
+    } catch (error) {
+      console.error('Error recording anonymous view:', error);
+    }
+  },
+
+  getOrCreateSessionId(): string {
+    let sessionId = localStorage.getItem('blog_session_id');
+    
+    if (!sessionId) {
+      // Create a unique session ID
+      sessionId = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      localStorage.setItem('blog_session_id', sessionId);
+    }
+    
+    return sessionId;
+  },
+
+  // Clean up old view records from localStorage (call this periodically)
+  cleanupOldViewRecords(): void {
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      
+      // Remove view records older than yesterday
+      Object.keys(localStorage).forEach(key => {
+        if (key.startsWith('view_') && !key.includes(today) && !key.includes(yesterday)) {
+          localStorage.removeItem(key);
+        }
+      });
+    } catch (error) {
+      console.error('Error cleaning up old view records:', error);
     }
   },
 

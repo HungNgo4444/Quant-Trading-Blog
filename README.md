@@ -18,7 +18,9 @@ Một blog chuyên về giao dịch định lượng được xây dựng với 
 - ✅ SEO optimization
 
 ### 📊 Analytics & Thống kê
-- ✅ View tracking
+- ✅ View tracking (cả logged in & anonymous users)
+- ✅ Session-based tracking cho anonymous users
+- ✅ Duplicate view prevention
 - ✅ Like/Share tracking
 - ✅ Tổng quan số liệu
 - ✅ Post performance
@@ -186,6 +188,28 @@ admin-check.js            # Comprehensive admin test
 - [ ] Author info update
 - [ ] Settings save/load
 
+## 📊 View Tracking System
+
+### Cách hoạt động:
+- **Logged-in users**: View được tính dựa trên user ID, mỗi user chỉ tính 1 view/ngày cho mỗi bài viết
+- **Anonymous users**: View được tính dựa trên session ID, lưu trong localStorage
+- **Duplicate prevention**: Tránh tính view trùng lặp trong cùng ngày
+- **Auto cleanup**: Tự động dọn dẹp records cũ trong localStorage
+
+### Technical Implementation:
+```typescript
+// For logged-in users
+await blogService.recordView(postId, user.id);
+
+// For anonymous users  
+await blogService.recordView(postId); // userId is undefined
+```
+
+### Data Storage:
+- **Database**: Lưu vào bảng `post_interactions` và `blog_posts`
+- **localStorage**: Lưu session tracking cho anonymous users
+- **Format**: `view_{postId}_{sessionId}_{date}`
+
 ## 🎯 Tech Stack
 
 - **Frontend**: React 18, TypeScript, Vite
@@ -195,6 +219,7 @@ admin-check.js            # Comprehensive admin test
 - **Routing**: React Router v6
 - **State Management**: React Context
 - **Markdown**: React Markdown
+- **Analytics**: Custom view tracking system
 
 ## 📞 Hỗ trợ
 

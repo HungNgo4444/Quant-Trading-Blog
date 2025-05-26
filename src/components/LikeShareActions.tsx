@@ -60,9 +60,8 @@ const LikeShareActions = ({
       loadComments();
     }
     
-    // Record view when component mounts
+    // Check like status only for logged in users
     if (user) {
-      blogService.recordView(postId, user.id);
       checkUserLikeStatus();
     }
   }, [postId, showComments, user]);
