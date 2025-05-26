@@ -3,17 +3,31 @@ import { User, AuthState, LoginCredentials, RegisterCredentials, AuthResponse } 
 import { isSupabaseConfigured } from '@/config/supabase';
 
 interface AuthContextType extends AuthState {
+  // Authentication
   login: (credentials: LoginCredentials) => Promise<AuthResponse>;
   register: (credentials: RegisterCredentials) => Promise<AuthResponse>;
-  logout: () => void;
-  verifyEmail: (email: string, code: string) => Promise<AuthResponse>;
-  resendVerificationCode: (email: string) => Promise<AuthResponse>;
+  logout: () => Promise<void>;
+  
+  // Email verification
+  verifyEmail: (token: string) => Promise<AuthResponse>;
+  resendVerificationEmail: (email?: string) => Promise<AuthResponse>;
+  
+  // Password management
   resetPassword: (email: string) => Promise<AuthResponse>;
-  updatePassword: (password: string) => Promise<AuthResponse>;
-  updateProfile: (data: any) => Promise<void>;
-  deleteAccount: () => Promise<void>;
+  updatePassword: (newPassword: string, currentPassword?: string) => Promise<AuthResponse>;
+  
+  // Profile management
+  updateProfile: (data: Partial<User>) => Promise<AuthResponse>;
+  uploadAvatar: (file: File) => Promise<AuthResponse>;
+  deleteAccount: () => Promise<AuthResponse>;
+  
+  // Account verification
+  checkEmailVerification: () => Promise<boolean>;
+  
+  // Utility
   isAdmin: boolean;
   isSupabaseEnabled: boolean;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -33,7 +47,7 @@ interface AuthProviderProps {
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [authState, setAuthState] = useState<AuthState>({
     user: null,
-    isLoading: false,
+    isLoading: true,
     isAuthenticated: false,
   });
 
@@ -50,7 +64,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   // Lazy load Supabase only when needed and available
   const getSupabase = async () => {
     if (!isSupabaseEnabled) {
-      throw new Error('Supabase not configured - please check .env file');
+      throw new Error('Supabase chưa được cấu hình - vui lòng kiểm tra file .env');
     }
     
     try {
@@ -58,10 +72,25 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       return supabase;
     } catch (error) {
       console.error('Failed to load Supabase:', error);
-      throw new Error('Failed to connect to database: ' + (error as Error).message);
+      throw new Error('Không thể kết nối database: ' + (error as Error).message);
     }
   };
 
+  // Helper function to create user object from Supabase data
+  const createUserFromSupabaseData = async (supabaseUser: any, profile?: any) => {
+    const user: User = {
+      id: supabaseUser.id,
+      email: supabaseUser.email!,
+      name: profile?.name || supabaseUser.user_metadata?.name || supabaseUser.email!.split('@')[0],
+      role: profile?.role || 'user',
+      isEmailVerified: supabaseUser.email_confirmed_at !== null,
+      createdAt: supabaseUser.created_at,
+      lastLoginAt: profile?.last_login_at || new Date().toISOString()
+    };
+    return user;
+  };
+
+  // Login function
   const login = async (credentials: LoginCredentials): Promise<AuthResponse> => {
     setAuthState(prev => ({ ...prev, isLoading: true }));
     
@@ -92,29 +121,36 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           };
         }
         
+        if (error.message.includes('Invalid login credentials')) {
+          return {
+            success: false,
+            message: "Email hoặc mật khẩu không đúng. Vui lòng kiểm tra lại thông tin đăng nhập."
+          };
+        }
+        
         return {
           success: false,
-          message: error.message === 'Invalid login credentials' 
-            ? "Email hoặc mật khẩu không đúng" 
-            : error.message
+          message: `Lỗi đăng nhập: ${error.message}`
         };
       }
 
       if (data.user) {
-        // Get user profile
-        const { data: profile } = await supabase
+        // Get user profile and update last login
+        const { data: profile, error: profileError } = await supabase
           .from('profiles')
           .select('*')
           .eq('id', data.user.id)
           .single();
 
-        const user: User = {
-          id: data.user.id,
-          email: data.user.email!,
-          name: profile?.name || data.user.email!.split('@')[0],
-          role: profile?.role || 'user',
-          isEmailVerified: data.user.email_confirmed_at !== null
-        };
+        if (!profileError && profile) {
+          // Update last login time
+          await supabase
+            .from('profiles')
+            .update({ last_login_at: new Date().toISOString() })
+            .eq('id', data.user.id);
+        }
+
+        const user = await createUserFromSupabaseData(data.user, profile);
 
         setAuthState({
           user,
@@ -124,7 +160,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
         return {
           success: true,
-          message: "Đăng nhập thành công",
+          message: "Đăng nhập thành công! Chào mừng bạn quay trở lại.",
           user
         };
       }
@@ -133,19 +169,30 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setAuthState(prev => ({ ...prev, isLoading: false }));
       return {
         success: false,
-        message: "Đã xảy ra lỗi khi đăng nhập: " + (error as Error).message
+        message: "Đã xảy ra lỗi không mong muốn khi đăng nhập. Vui lòng thử lại sau."
       };
     }
 
     setAuthState(prev => ({ ...prev, isLoading: false }));
     return {
       success: false,
-      message: "Đăng nhập thất bại"
+      message: "Đăng nhập thất bại. Vui lòng thử lại."
     };
   };
 
+  // Register function
   const register = async (credentials: RegisterCredentials): Promise<AuthResponse> => {
+    setAuthState(prev => ({ ...prev, isLoading: true }));
+    
     try {
+      if (!isSupabaseEnabled) {
+        setAuthState(prev => ({ ...prev, isLoading: false }));
+        return {
+          success: false,
+          message: "Database không khả dụng. Vui lòng kiểm tra cấu hình Supabase."
+        };
+      }
+
       const supabase = await getSupabase();
       
       // Register with email confirmation
@@ -156,24 +203,56 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           data: {
             name: credentials.name,
           },
-          emailRedirectTo: `${getCurrentSiteUrl()}/auth?tab=login&verified=true`
+          emailRedirectTo: `${getCurrentSiteUrl()}/auth?verified=true`
         }
       });
 
+      setAuthState(prev => ({ ...prev, isLoading: false }));
+
       if (error) {
+        if (error.message.includes('User already registered')) {
+          return {
+            success: false,
+            message: "Email này đã được đăng ký. Vui lòng sử dụng email khác hoặc đăng nhập nếu đây là tài khoản của bạn."
+          };
+        }
+        
+        if (error.message.includes('Password should be at least')) {
+          return {
+            success: false,
+            message: "Mật khẩu phải có ít nhất 6 ký tự. Vui lòng chọn mật khẩu mạnh hơn."
+          };
+        }
+        
         return {
           success: false,
-          message: error.message === 'User already registered' 
-            ? "Email này đã được đăng ký. Vui lòng sử dụng email khác hoặc đăng nhập."
-            : error.message
+          message: `Lỗi đăng ký: ${error.message}`
         };
+      }
+
+      // Create profile in database
+      if (data.user) {
+        try {
+          await supabase
+            .from('profiles')
+            .insert({
+              id: data.user.id,
+              email: data.user.email,
+              name: credentials.name,
+              role: 'user',
+              is_email_verified: false,
+              created_at: new Date().toISOString()
+            });
+        } catch (profileError) {
+          console.warn('Could not create profile:', profileError);
+        }
       }
 
       // Check if user needs email confirmation
       if (data.user && !data.user.email_confirmed_at) {
         return {
           success: true,
-          message: "Đăng ký thành công! Vui lòng kiểm tra email để xác thực tài khoản trước khi đăng nhập.",
+          message: "Đăng ký thành công! Chúng tôi đã gửi email xác thực đến địa chỉ của bạn. Vui lòng kiểm tra email và nhấp vào liên kết để kích hoạt tài khoản.",
           requiresEmailVerification: true
         };
       }
@@ -184,181 +263,420 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       };
     } catch (error) {
       console.error('Register error:', error);
+      setAuthState(prev => ({ ...prev, isLoading: false }));
       return {
         success: false,
-        message: "Đã xảy ra lỗi khi đăng ký: " + (error as Error).message
+        message: "Đã xảy ra lỗi không mong muốn khi đăng ký. Vui lòng thử lại sau."
       };
     }
   };
 
-  const logout = async () => {
+  // Logout function
+  const logout = async (): Promise<void> => {
     try {
-      const supabase = await getSupabase();
-      await supabase.auth.signOut();
+      if (isSupabaseEnabled) {
+        const supabase = await getSupabase();
+        await supabase.auth.signOut();
+      }
     } catch (error) {
       console.error('Logout error:', error);
+    } finally {
+      setAuthState({
+        user: null,
+        isLoading: false,
+        isAuthenticated: false,
+      });
     }
-    
-    setAuthState({
-      user: null,
-      isLoading: false,
-      isAuthenticated: false,
-    });
   };
 
-  const verifyEmail = async (email: string, code: string): Promise<AuthResponse> => {
+  // Email verification
+  const verifyEmail = async (token: string): Promise<AuthResponse> => {
     try {
       const supabase = await getSupabase();
       const { data, error } = await supabase.auth.verifyOtp({
-        email,
-        token: code,
-        type: 'signup'
+        token_hash: token,
+        type: 'email'
       });
 
       if (error) {
         return {
           success: false,
-          message: error.message === 'Token has expired or is invalid'
-            ? "Mã xác thực đã hết hạn hoặc không hợp lệ. Vui lòng yêu cầu mã mới."
-            : error.message
+          message: `Lỗi xác thực email: ${error.message}`
+        };
+      }
+
+      if (data.user) {
+        // Update profile verification status
+        await supabase
+          .from('profiles')
+          .update({ 
+            is_email_verified: true,
+            email_verified_at: new Date().toISOString()
+          })
+          .eq('id', data.user.id);
+
+        return {
+          success: true,
+          message: "Email đã được xác thực thành công! Bạn có thể đăng nhập ngay bây giờ."
         };
       }
 
       return {
-        success: true,
-        message: "Email đã được xác thực thành công! Bạn có thể đăng nhập ngay bây giờ."
+        success: false,
+        message: "Không thể xác thực email. Vui lòng thử lại."
       };
     } catch (error) {
       console.error('Email verification error:', error);
       return {
         success: false,
-        message: "Đã xảy ra lỗi khi xác thực email: " + (error as Error).message
+        message: "Đã xảy ra lỗi khi xác thực email. Vui lòng thử lại sau."
       };
     }
   };
 
-  const resendVerificationCode = async (email: string): Promise<AuthResponse> => {
+  // Resend verification email
+  const resendVerificationEmail = async (email?: string): Promise<AuthResponse> => {
     try {
       const supabase = await getSupabase();
+      const targetEmail = email || authState.user?.email;
+      
+      if (!targetEmail) {
+        return {
+          success: false,
+          message: "Không tìm thấy email để gửi lại xác thực."
+        };
+      }
+
       const { error } = await supabase.auth.resend({
         type: 'signup',
-        email,
+        email: targetEmail,
         options: {
-          emailRedirectTo: `${getCurrentSiteUrl()}/auth?tab=login&verified=true`
+          emailRedirectTo: `${getCurrentSiteUrl()}/auth?verified=true`
         }
       });
 
       if (error) {
         return {
           success: false,
-          message: error.message
+          message: `Lỗi gửi lại email: ${error.message}`
         };
       }
 
       return {
         success: true,
-        message: "Mã xác thực đã được gửi lại đến email của bạn"
+        message: "Email xác thực đã được gửi lại. Vui lòng kiểm tra hộp thư của bạn."
       };
     } catch (error) {
       console.error('Resend verification error:', error);
       return {
         success: false,
-        message: "Đã xảy ra lỗi khi gửi lại mã xác thực: " + (error as Error).message
+        message: "Đã xảy ra lỗi khi gửi lại email xác thực. Vui lòng thử lại sau."
       };
     }
   };
 
+  // Reset password
   const resetPassword = async (email: string): Promise<AuthResponse> => {
     try {
       const supabase = await getSupabase();
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${getCurrentSiteUrl()}/reset-password`
+        redirectTo: `${getCurrentSiteUrl()}/auth?tab=reset-password`
       });
 
       if (error) {
         return {
           success: false,
-          message: error.message
+          message: `Lỗi gửi email đặt lại mật khẩu: ${error.message}`
         };
       }
 
       return {
         success: true,
-        message: "Link đặt lại mật khẩu đã được gửi đến email của bạn"
+        message: "Email đặt lại mật khẩu đã được gửi. Vui lòng kiểm tra hộp thư và làm theo hướng dẫn."
       };
     } catch (error) {
       console.error('Reset password error:', error);
       return {
         success: false,
-        message: "Đã xảy ra lỗi khi gửi link đặt lại mật khẩu: " + (error as Error).message
+        message: "Đã xảy ra lỗi khi gửi email đặt lại mật khẩu. Vui lòng thử lại sau."
       };
     }
   };
 
-  const updatePassword = async (password: string): Promise<AuthResponse> => {
+  // Update password
+  const updatePassword = async (newPassword: string, currentPassword?: string): Promise<AuthResponse> => {
     try {
       const supabase = await getSupabase();
-      const { data, error } = await supabase.auth.updateUser({
-        password: password
+      
+      // If current password is provided, verify it first
+      if (currentPassword && authState.user) {
+        const { error: verifyError } = await supabase.auth.signInWithPassword({
+          email: authState.user.email,
+          password: currentPassword
+        });
+        
+        if (verifyError) {
+          return {
+            success: false,
+            message: "Mật khẩu hiện tại không đúng."
+          };
+        }
+      }
+
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword
       });
 
       if (error) {
         return {
           success: false,
-          message: error.message === 'New password should be different from the old password'
-            ? "Mật khẩu mới phải khác với mật khẩu cũ"
-            : error.message
+          message: `Lỗi cập nhật mật khẩu: ${error.message}`
         };
       }
 
       return {
         success: true,
-        message: "Mật khẩu đã được cập nhật thành công"
+        message: "Mật khẩu đã được cập nhật thành công."
       };
     } catch (error) {
       console.error('Update password error:', error);
       return {
         success: false,
-        message: "Đã xảy ra lỗi khi cập nhật mật khẩu: " + (error as Error).message
+        message: "Đã xảy ra lỗi khi cập nhật mật khẩu. Vui lòng thử lại sau."
       };
     }
   };
 
-  const updateProfile = async (data: any): Promise<void> => {
+  // Update profile
+  const updateProfile = async (data: Partial<User>): Promise<AuthResponse> => {
     try {
       const supabase = await getSupabase();
-      const { error } = await supabase
-        .from('profiles')
-        .update(data)
-        .eq('id', authState.user?.id);
-
-      if (error) {
-        throw error;
+      
+      if (!authState.user) {
+        return {
+          success: false,
+          message: "Bạn cần đăng nhập để cập nhật thông tin."
+        };
       }
+
+      // Update user metadata in auth
+      const authUpdates: any = {};
+      if (data.name) authUpdates.name = data.name;
+      
+      if (Object.keys(authUpdates).length > 0) {
+        const { error: authError } = await supabase.auth.updateUser({
+          data: authUpdates
+        });
+        
+        if (authError) {
+          return {
+            success: false,
+            message: `Lỗi cập nhật thông tin xác thực: ${authError.message}`
+          };
+        }
+      }
+
+      // Update profile in database
+      const profileUpdates: any = {};
+      if (data.name) profileUpdates.name = data.name;
+      profileUpdates.updated_at = new Date().toISOString();
+
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update(profileUpdates)
+        .eq('id', authState.user.id);
+
+      if (profileError) {
+        return {
+          success: false,
+          message: `Lỗi cập nhật hồ sơ: ${profileError.message}`
+        };
+      }
+
+      // Update local state
+      setAuthState(prev => ({
+        ...prev,
+        user: prev.user ? { ...prev.user, ...data } : null
+      }));
+
+      return {
+        success: true,
+        message: "Thông tin hồ sơ đã được cập nhật thành công."
+      };
     } catch (error) {
       console.error('Update profile error:', error);
-      throw error;
+      return {
+        success: false,
+        message: "Đã xảy ra lỗi khi cập nhật hồ sơ. Vui lòng thử lại sau."
+      };
     }
   };
 
-  const deleteAccount = async (): Promise<void> => {
+  // Upload avatar (placeholder - implementation depends on storage setup)
+  const uploadAvatar = async (file: File): Promise<AuthResponse> => {
     try {
       const supabase = await getSupabase();
-      // Note: Supabase doesn't have a direct delete user method
-      // This would typically be handled by a server function
-      console.log('Account deletion requested');
-      logout();
+      
+      if (!authState.user) {
+        return {
+          success: false,
+          message: "Bạn cần đăng nhập để tải lên avatar."
+        };
+      }
+
+      // Create unique filename
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${authState.user.id}-${Date.now()}.${fileExt}`;
+
+      // Upload to storage
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(fileName, file);
+
+      if (uploadError) {
+        return {
+          success: false,
+          message: `Lỗi tải lên avatar: ${uploadError.message}`
+        };
+      }
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(fileName);
+
+      // Update profile with avatar URL
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ avatar_url: publicUrl })
+        .eq('id', authState.user.id);
+
+      if (updateError) {
+        return {
+          success: false,
+          message: `Lỗi cập nhật avatar: ${updateError.message}`
+        };
+      }
+
+      return {
+        success: true,
+        message: "Avatar đã được cập nhật thành công."
+      };
+    } catch (error) {
+      console.error('Upload avatar error:', error);
+      return {
+        success: false,
+        message: "Đã xảy ra lỗi khi tải lên avatar. Vui lòng thử lại sau."
+      };
+    }
+  };
+
+  // Delete account
+  const deleteAccount = async (): Promise<AuthResponse> => {
+    try {
+      const supabase = await getSupabase();
+      
+      if (!authState.user) {
+        return {
+          success: false,
+          message: "Bạn cần đăng nhập để xóa tài khoản."
+        };
+      }
+
+      // Note: Supabase doesn't provide direct user deletion from client
+      // This would typically require an admin function or RPC call
+      // For now, we'll mark the profile as deleted
+      const { error } = await supabase
+        .from('profiles')
+        .update({ 
+          deleted_at: new Date().toISOString(),
+          email: `deleted_${Date.now()}@deleted.com`,
+          name: 'Deleted User'
+        })
+        .eq('id', authState.user.id);
+
+      if (error) {
+        return {
+          success: false,
+          message: `Lỗi xóa tài khoản: ${error.message}`
+        };
+      }
+
+      // Sign out the user
+      await logout();
+
+      return {
+        success: true,
+        message: "Tài khoản đã được xóa thành công."
+      };
     } catch (error) {
       console.error('Delete account error:', error);
-      throw error;
+      return {
+        success: false,
+        message: "Đã xảy ra lỗi khi xóa tài khoản. Vui lòng thử lại sau."
+      };
+    }
+  };
+
+  // Check email verification status
+  const checkEmailVerification = async (): Promise<boolean> => {
+    try {
+      if (!authState.user) return false;
+      
+      const supabase = await getSupabase();
+      const { data } = await supabase.auth.getUser();
+      
+      return data.user?.email_confirmed_at !== null;
+    } catch (error) {
+      console.error('Check email verification error:', error);
+      return false;
+    }
+  };
+
+  // Refresh user data
+  const refreshUser = async (): Promise<void> => {
+    try {
+      if (!isSupabaseEnabled) return;
+      
+      const supabase = await getSupabase();
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', user.id)
+          .single();
+
+        const updatedUser = await createUserFromSupabaseData(user, profile);
+        
+        setAuthState(prev => ({
+          ...prev,
+          user: updatedUser,
+          isAuthenticated: true
+        }));
+      }
+    } catch (error) {
+      console.error('Refresh user error:', error);
     }
   };
 
   // Initialize auth state
   useEffect(() => {
     const initializeAuth = async () => {
+      if (!isSupabaseEnabled) {
+        setAuthState({
+          user: null,
+          isLoading: false,
+          isAuthenticated: false,
+        });
+        return;
+      }
+
       try {
         const supabase = await getSupabase();
+        
+        // Get current session
         const { data: { session } } = await supabase.auth.getSession();
         
         if (session?.user) {
@@ -368,26 +686,24 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             .eq('id', session.user.id)
             .single();
 
-          const user: User = {
-            id: session.user.id,
-            email: session.user.email!,
-            name: profile?.name || session.user.email!.split('@')[0],
-            role: profile?.role || 'user',
-            isEmailVerified: session.user.email_confirmed_at !== null
-          };
-
+          const user = await createUserFromSupabaseData(session.user, profile);
+          
           setAuthState({
             user,
             isLoading: false,
             isAuthenticated: true,
+          });
+        } else {
+          setAuthState({
+            user: null,
+            isLoading: false,
+            isAuthenticated: false,
           });
         }
 
         // Listen for auth changes
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
           async (event, session) => {
-            console.log('Auth state changed:', event, session?.user?.email);
-            
             if (session?.user) {
               const { data: profile } = await supabase
                 .from('profiles')
@@ -395,14 +711,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                 .eq('id', session.user.id)
                 .single();
 
-              const user: User = {
-                id: session.user.id,
-                email: session.user.email!,
-                name: profile?.name || session.user.email!.split('@')[0],
-                role: profile?.role || 'user',
-                isEmailVerified: session.user.email_confirmed_at !== null
-              };
-
+              const user = await createUserFromSupabaseData(session.user, profile);
+              
               setAuthState({
                 user,
                 isLoading: false,
@@ -430,7 +740,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     };
 
     initializeAuth();
-  }, []);
+  }, [isSupabaseEnabled]);
 
   const isAdmin = authState.user?.role === 'admin';
 
@@ -440,18 +750,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     register,
     logout,
     verifyEmail,
-    resendVerificationCode,
+    resendVerificationEmail,
     resetPassword,
     updatePassword,
     updateProfile,
+    uploadAvatar,
     deleteAccount,
+    checkEmailVerification,
+    refreshUser,
     isAdmin,
     isSupabaseEnabled,
   };
 
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }; 

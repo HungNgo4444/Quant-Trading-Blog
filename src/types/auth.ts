@@ -6,6 +6,26 @@ export interface User {
   isEmailVerified: boolean;
   createdAt: string;
   lastLoginAt?: string;
+  avatarUrl?: string;
+  bio?: string;
+  website?: string;
+  location?: string;
+  phone?: string;
+  preferences?: UserPreferences;
+}
+
+export interface UserPreferences {
+  theme: 'light' | 'dark' | 'system';
+  language: string;
+  notifications: {
+    email: boolean;
+    push: boolean;
+    marketing: boolean;
+  };
+  privacy: {
+    showEmail: boolean;
+    showProfile: boolean;
+  };
 }
 
 export interface AuthState {
@@ -25,6 +45,7 @@ export interface RegisterCredentials {
   email: string;
   password: string;
   confirmPassword: string;
+  agreeToTerms?: boolean;
 }
 
 export interface AuthResponse {
@@ -33,6 +54,7 @@ export interface AuthResponse {
   user?: User;
   token?: string;
   requiresEmailVerification?: boolean;
+  requiresTwoFactor?: boolean;
 }
 
 export interface PasswordResetRequest {
@@ -45,6 +67,12 @@ export interface PasswordReset {
   confirmPassword: string;
 }
 
+export interface PasswordUpdate {
+  currentPassword: string;
+  newPassword: string;
+  confirmPassword: string;
+}
+
 export interface EmailVerification {
   token: string;
 }
@@ -52,4 +80,33 @@ export interface EmailVerification {
 export interface TwoFactorAuth {
   email: string;
   code: string;
+}
+
+export interface ProfileUpdate {
+  name?: string;
+  bio?: string;
+  website?: string;
+  location?: string;
+  phone?: string;
+}
+
+export interface AccountSecurity {
+  twoFactorEnabled: boolean;
+  lastPasswordChange?: string;
+  loginHistory: LoginHistoryEntry[];
+}
+
+export interface LoginHistoryEntry {
+  id: string;
+  timestamp: string;
+  ipAddress: string;
+  userAgent: string;
+  location?: string;
+  success: boolean;
+}
+
+export interface AuthError {
+  code: string;
+  message: string;
+  details?: any;
 } 

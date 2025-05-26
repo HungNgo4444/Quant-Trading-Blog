@@ -4,10 +4,14 @@ Một blog chuyên về giao dịch định lượng được xây dựng với 
 
 ## ✨ Tính năng chính
 
-### 🔐 Hệ thống Admin hoàn chỉnh
-- **AdminSafe**: Trang kiểm tra an toàn trước khi vào admin
-- **AdminWrapper**: Error handling thông minh
-- **Admin Panel**: Quản lý toàn diện blog
+### 🔐 Hệ thống Authentication
+- ✅ Đăng ký và đăng nhập
+- ✅ Xác thực email
+- ✅ Quên mật khẩu
+- ✅ Cập nhật thông tin cá nhân
+- ✅ Quản lý avatar
+- ✅ Xóa tài khoản
+- ✅ Bảo mật hai lớp
 
 ### 📝 Quản lý Bài viết
 - ✅ Tạo, chỉnh sửa, xóa bài viết
@@ -41,18 +45,34 @@ Một blog chuyên về giao dịch định lượng được xây dựng với 
 
 ### 1. Clone repository
 ```bash
-git clone <repository-url>
+git clone https://github.com/your-username/quant-trading-blog.git
 cd quant-trading-blog
 ```
 
 ### 2. Cài đặt dependencies
 ```bash
 npm install
+# hoặc
+yarn install
+# hoặc
+pnpm install
 ```
 
-### 3. Setup Database (Supabase)
-1. Truy cập [Supabase Dashboard](https://supabase.com)
-2. Chọn project: `ebcjduaadxsfrmdkinle`
+### 3. Cấu hình môi trường
+Tạo file `.env` từ file mẫu:
+```bash
+cp .env.example .env
+```
+
+Cập nhật các biến môi trường trong file `.env`:
+```env
+VITE_SUPABASE_URL=your_supabase_url
+VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+```
+
+### 4. Setup Database (Supabase)
+1. Tạo tài khoản tại [Supabase](https://supabase.com)
+2. Tạo project mới
 3. Vào SQL Editor và chạy các file theo thứ tự:
    ```sql
    -- 1. Tạo schema cơ bản
@@ -60,17 +80,18 @@ npm install
    
    -- 2. Tạo bảng settings
    blog-settings-table.sql
-   
-   -- 3. Tạo admin user
-   fix-admin-correct.sql
    ```
 
-### 4. Chạy ứng dụng
+### 5. Chạy ứng dụng
 ```bash
 npm run dev
+# hoặc
+yarn dev
+# hoặc
+pnpm dev
 ```
 
-Ứng dụng sẽ chạy tại: http://localhost:8080
+Ứng dụng sẽ chạy tại: http://localhost:5173
 
 ## 👨‍💼 Sử dụng Admin Panel
 
