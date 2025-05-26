@@ -88,13 +88,17 @@ const Settings = () => {
     setMessage('');
     
     try {
-      await updatePassword(passwordData.newPassword);
-      setMessage('Mật khẩu đã được thay đổi thành công!');
-      setPasswordData({
-        currentPassword: '',
-        newPassword: '',
-        confirmPassword: ''
-      });
+      const response = await updatePassword(passwordData.newPassword, passwordData.currentPassword);
+      if (response.success) {
+        setMessage('Mật khẩu đã được thay đổi thành công!');
+        setPasswordData({
+          currentPassword: '',
+          newPassword: '',
+          confirmPassword: ''
+        });
+      } else {
+        setMessage(response.message);
+      }
     } catch (error) {
       console.error('Error changing password:', error);
       setMessage('Có lỗi xảy ra khi thay đổi mật khẩu');

@@ -48,8 +48,18 @@ const Profile = () => {
     setMessage('');
     
     try {
-      await updateProfile(profileData);
-      setMessage('Hồ sơ đã được cập nhật thành công!');
+      const response = await updateProfile({
+        name: profileData.name,
+        bio: profileData.bio,
+        website: profileData.website,
+        location: profileData.location
+      });
+
+      if (response.success) {
+        setMessage('Hồ sơ đã được cập nhật thành công!');
+      } else {
+        setMessage(response.message || 'Có lỗi xảy ra khi cập nhật hồ sơ');
+      }
     } catch (error) {
       console.error('Error updating profile:', error);
       setMessage('Có lỗi xảy ra khi cập nhật hồ sơ');

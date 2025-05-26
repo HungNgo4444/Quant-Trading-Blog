@@ -11,6 +11,7 @@ import AdminSafe from '@/pages/AdminSafe';
 import AdminSimple from '@/pages/AdminSimple';
 import Profile from '@/pages/Profile';
 import Settings from '@/pages/Settings';
+import ResetPassword from '@/pages/ResetPassword';
 
 function App() {
   // Clean up old view records on app initialization
@@ -27,6 +28,7 @@ function App() {
             <Route path="/post/:id" element={<BlogPost />} />
             <Route path="/about" element={<About />} />
             <Route path="/auth" element={<Auth />} />
+            <Route path="/auth/reset-password" element={<ResetPassword />} />
             <Route path="/admin" element={<AdminSafe />} />
             <Route path="/admin/panel" element={<AdminSimple />} />
             <Route path="/profile" element={<Profile />} />

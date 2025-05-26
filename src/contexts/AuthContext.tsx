@@ -380,7 +380,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       const supabase = await getSupabase();
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${getCurrentSiteUrl()}/auth?tab=reset-password`
+        redirectTo: `${getCurrentSiteUrl()}/auth/reset-password`
       });
 
       if (error) {
@@ -461,14 +461,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       // Update user metadata in auth
       const authUpdates: any = {};
-      if (data.name) authUpdates.name = data.name;
+      if (data.name) authUpdates.data = { name: data.name };
       
       if (Object.keys(authUpdates).length > 0) {
-        const { error: authError } = await supabase.auth.updateUser({
-          data: authUpdates
-        });
+        const { error: authError } = await supabase.auth.updateUser(authUpdates);
         
         if (authError) {
+          console.error('Auth update error:', authError);
           return {
             success: false,
             message: `Lỗi cập nhật thông tin xác thực: ${authError.message}`
@@ -477,9 +476,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
 
       // Update profile in database
-      const profileUpdates: any = {};
+      const profileUpdates: any = {
+        updated_at: new Date().toISOString()
+      };
+
       if (data.name) profileUpdates.name = data.name;
-      profileUpdates.updated_at = new Date().toISOString();
+      if (data.bio) profileUpdates.bio = data.bio;
+      if (data.website) profileUpdates.website = data.website;
+      if (data.location) profileUpdates.location = data.location;
 
       const { error: profileError } = await supabase
         .from('profiles')
@@ -487,6 +491,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         .eq('id', authState.user.id);
 
       if (profileError) {
+        console.error('Profile update error:', profileError);
         return {
           success: false,
           message: `Lỗi cập nhật hồ sơ: ${profileError.message}`
